@@ -406,7 +406,7 @@ export default function AppLayout() {
 
       <ContentWrapper>
         <LeftControls>
-          <SectionLabel>SELECT / EDIT</SectionLabel>
+          <SectionLabel>SELECT / EDITs</SectionLabel>
           <CtrlSection>
             <CtrlColumn>
               <IconBtn title="Box Select"><img src="/img/box_select1.png" alt="select" /></IconBtn>
