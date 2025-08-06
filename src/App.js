@@ -1,5 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 import styled from "styled-components";
+import Spectrogram from './Spectrogram';
+import WaveSurfer from "wavesurfer.js";
+import SpectrogramPlugin from "wavesurfer.js/dist/plugins/spectrogram.esm.js";
 
 const theme = {
   bg: "#0f111a",
@@ -394,7 +397,9 @@ export const BtnFull = styled(Btn)`
 
 
 export default function AppLayout() {
+  const [audioUrl, setAudioUrl] = useState("/audio/whale.mp3");
   return (
+    
     <AppRoot>
       <Topbar>
         <Title>Audio Annotations</Title>
@@ -476,10 +481,7 @@ export default function AppLayout() {
             </ViewerHeader>
             <ViewerBox>
               <Placeholder>
-                <PlaceholderImg
-                  src="/img/placeholder.png"
-                  alt="placeholder"
-                />
+                <Spectrogram audioUrl={audioUrl} />
                 <OverlayLabel>
                   Waveform / Visualization placeholder
                 </OverlayLabel>
