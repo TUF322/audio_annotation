@@ -3,7 +3,7 @@ import styled from "styled-components";
 import Spectrogram from './Spectrogram';
 import WaveSurfer from "wavesurfer.js";
 import SpectrogramPlugin from "wavesurfer.js/dist/plugins/spectrogram.esm.js";
-
+import PlaybackControls from './PlaybackControls';
 const theme = {
   bg: "#0f111a",
   card: "#1f2430",
@@ -398,8 +398,9 @@ export const BtnFull = styled(Btn)`
 
 export default function AppLayout() {
   const [audioUrl, setAudioUrl] = useState("/audio/whale.mp3");
+  const [wavesurfer, setWavesurfer] = useState(null);
   return (
-    
+
     <AppRoot>
       <Topbar>
         <Title>Audio Annotations</Title>
@@ -481,27 +482,29 @@ export default function AppLayout() {
             </ViewerHeader>
             <ViewerBox>
               <Placeholder>
-                <Spectrogram audioUrl={audioUrl} />
+                <Spectrogram
+                  audioUrl={audioUrl}
+                  onReady={instance => setWavesurfer(instance)}
+
+
+                  onClickTimeFreq={({ time, freq }) => {
+                    // ex.: store em state ou mostrar num tooltip
+                    console.log('UTC:', time, 'Hz:', freq);
+                  }}
+
+                />
+
                 <OverlayLabel>
                   Waveform / Visualization placeholder
                 </OverlayLabel>
               </Placeholder>
 
               <Playback>
-                <ControlsRow>
-                  <ControlBtn title="Previous"><img src="/img/previous1.png" alt="prev" /></ControlBtn>
-                  <ControlBtn title="Play"><img src="/img/play1.png" alt="play" /></ControlBtn>
-                  <ControlBtn title="Next"><img src="/img/next-button1.png" alt="next" /></ControlBtn>
-                </ControlsRow>
-                <IconBtn title="like"><img src="/img/like1.png" alt="like" /></IconBtn>
-                <IconBtn title="dislike"><img src="/img/dislike1.png" alt="dislike" /></IconBtn>
-                <ProgressWrapper>
-                  <ScrollBarContainer>
-                    <ScrollBar><ScrollThumb /></ScrollBar>
-                  </ScrollBarContainer>
-                  
-                  <Time>00:12 / 03:45</Time>
-                </ProgressWrapper>
+                <PlaybackControls
+                  wavesurfer={wavesurfer}
+                  onLike={() => console.log('liked')}
+                  onDislike={() => console.log('disliked')}
+                />
               </Playback>
             </ViewerBox>
           </Viewer>
