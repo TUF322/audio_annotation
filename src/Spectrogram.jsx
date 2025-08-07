@@ -23,48 +23,45 @@ const SpectrogramWrapper = styled.div`
   cursor: crosshair;
 `;
 
-/**
- * Spectrogram component using WaveSurfer + Spectrogram plugin.
- * Props:
- *   audioUrl: string – arquivo de áudio
- *   onReady?: fn – recebe a instância do WaveSurfer
- *   onClickTimeFreq?: fn – recebe { time, freq } ao clicar
- */
+
 const Spectrogram = ({ audioUrl, onReady, onClickTimeFreq }) => {
-  const waveformRef   = useRef(null);
+  const waveformRef    = useRef(null);
   const spectrogramRef = useRef(null);
+  const canvasRef      = useRef(null);
 
   useEffect(() => {
+    
     const wavesurfer = WaveSurfer.create({
-      container: waveformRef.current,
-      waveColor: '#888',
+      container:     waveformRef.current,
+      waveColor:     '#888',
       progressColor: '#5c6bc0',
-      cursorColor: '#fff',
-      scrollParent: true,
-      backend: 'WebAudio',
-      height: 100,
-      responsive: true,
+      cursorColor:   '#fff',
+      scrollParent:  true,
+      backend:       'WebAudio',
+      height:        100,
+      responsive:    true,
       plugins: [
         SpectrogramPlugin.create({
           container: spectrogramRef.current,
-          labels: true,
-          height: 128,
+          labels:    true,
+          height:    128,
         }),
       ],
     });
 
-    // passa instância para o pai
+
     if (typeof onReady === 'function') {
       onReady(wavesurfer);
     }
 
-    // carrega áudio
+    
     wavesurfer.load(audioUrl);
 
-    // listener de clique para calcular t e f
-    const specEl = spectrogramRef.current;
     const handleClick = e => {
-      const rect   = specEl.getBoundingClientRect();
+      const c = canvasRef.current;
+      if (!c) return;
+
+      const rect   = c.getBoundingClientRect();
       const x      = e.clientX - rect.left;
       const y      = e.clientY - rect.top;
       const width  = rect.width;
@@ -74,27 +71,43 @@ const Spectrogram = ({ audioUrl, onReady, onClickTimeFreq }) => {
       const time     = (x / width) * duration;
 
       const sr      = wavesurfer.backend.buffer?.sampleRate || 44100;
-      const nyquist = sr / 2;
-      const freq    = ((height - y) / height) * nyquist;
+      const freq    = ((height - y) / height) * (sr / 2);
+
+      const ctx  = c.getContext('2d');
+      const img  = ctx.getImageData(x, y, 1, 1).data; 
+      const rgba = { r: img[0], g: img[1], b: img[2], a: img[3] };
 
       if (typeof onClickTimeFreq === 'function') {
-        onClickTimeFreq({ time, freq });
+        onClickTimeFreq({ time, freq, rgba });
       } else {
         console.log(
-          `Clique: t=${time.toFixed(2)}s, f=${freq.toFixed(0)}Hz`
+          `t=${time.toFixed(2)}s, f=${freq.toFixed(0)}Hz, rgba=(${[
+            img[0], img[1], img[2], img[3]
+          ].join(',')})`
         );
       }
     };
 
-    specEl.addEventListener('click', handleClick);
+    let canvasEl = null;
+    const onWsReady = () => {
+      const wrapper = spectrogramRef.current;
+      if (!wrapper) return;
+      const c = wrapper.querySelector('canvas');
+      if (c) {
+        canvasRef.current = c;
+        c.addEventListener('click', handleClick);
+      }
+    };
+    wavesurfer.on('ready', onWsReady);
 
-    // cleanup
     return () => {
-      specEl.removeEventListener('click', handleClick);
+      if (canvasRef.current) {
+        canvasRef.current.removeEventListener('click', handleClick);
+      }
+      wavesurfer.un('ready', onWsReady);
       wavesurfer.destroy();
     };
-  // só refaz quando mudar o áudio
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    
   }, [audioUrl]);
 
   return (
@@ -106,13 +119,13 @@ const Spectrogram = ({ audioUrl, onReady, onClickTimeFreq }) => {
 };
 
 Spectrogram.propTypes = {
-  audioUrl: PropTypes.string.isRequired,
-  onReady: PropTypes.func,
+  audioUrl:        PropTypes.string.isRequired,
+  onReady:         PropTypes.func,
   onClickTimeFreq: PropTypes.func,
 };
 
 Spectrogram.defaultProps = {
-  onReady: null,
+  onReady:         null,
   onClickTimeFreq: null,
 };
 

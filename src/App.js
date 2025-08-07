@@ -199,6 +199,7 @@ export const ViewerBox = styled.div`
 `;
 
 export const Placeholder = styled.div`
+  
   position: relative;
   flex: 1;
   background: #1b1f31;
@@ -208,7 +209,7 @@ export const Placeholder = styled.div`
   align-items: center;
   justify-content: center;
 `;
-
+//pointer-events: none;
 export const PlaceholderImg = styled.img`
   max-width: 100%;
   max-height: 100%;
@@ -297,7 +298,6 @@ export const Time = styled.div`
   text-align: center;
 `;
 
-// Bottom panels
 export const Bottom = styled.section`
   padding: 16px;
   background: transparent;
@@ -409,7 +409,7 @@ export default function AppLayout() {
           <Btn>Upload</Btn>
         </Actions>
       </Topbar>
-
+  
       <ContentWrapper>
         <LeftControls>
           <SectionLabel>SELECT / EDITs</SectionLabel>
@@ -476,28 +476,17 @@ export default function AppLayout() {
         </TagSidebar>
 
         <MainArea>
-          <Viewer>
-            <ViewerHeader>
-              <Badge>Waveform / Visualization placeholder</Badge>
-            </ViewerHeader>
-            <ViewerBox>
-              <Placeholder>
+          
+            
+              
                 <Spectrogram
                   audioUrl={audioUrl}
                   onReady={instance => setWavesurfer(instance)}
-
-
                   onClickTimeFreq={({ time, freq }) => {
-                    // ex.: store em state ou mostrar num tooltip
-                    console.log('UTC:', time, 'Hz:', freq);
-                  }}
+                  console.log('UTC:', time, 'Hz:', freq); }}
 
                 />
 
-                <OverlayLabel>
-                  Waveform / Visualization placeholder
-                </OverlayLabel>
-              </Placeholder>
 
               <Playback>
                 <PlaybackControls
@@ -506,8 +495,7 @@ export default function AppLayout() {
                   onDislike={() => console.log('disliked')}
                 />
               </Playback>
-            </ViewerBox>
-          </Viewer>
+            
 
           <Bottom>
             <BottomGrid>
@@ -526,7 +514,7 @@ export default function AppLayout() {
                         <Th>High Freq (Hz)</Th>
                         <Th>Low Freq (Hz)</Th>
                         <Th>Class</Th>
-                      </tr>
+                      </tr> 
                     </thead>
                     <tbody>
                       <tr>
