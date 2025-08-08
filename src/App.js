@@ -198,6 +198,7 @@ export const ViewerBox = styled.div`
 `;
 
 export const Placeholder = styled.div`
+  
   position: relative;
   flex: 1;
   background: #1b1f31;
@@ -207,7 +208,7 @@ export const Placeholder = styled.div`
   align-items: center;
   justify-content: center;
 `;
-
+//pointer-events: none;
 export const PlaceholderImg = styled.img`
   max-width: 100%;
   max-height: 100%;
@@ -296,7 +297,6 @@ export const Time = styled.div`
   text-align: center;
 `;
 
-// Bottom panels
 export const Bottom = styled.section`
   padding: 16px;
   background: transparent;
@@ -395,7 +395,7 @@ export const BtnFull = styled(Btn)`
 `;
 
 export default function AppLayout() {
-  const [audioUrl]    = useState("/audio/whale.mp3");
+  const [audioUrl] = useState("/audio/whale.mp3");
   const [wavesurfer, setWavesurfer] = useState(null);
 
   // memorizo o callback de ready
@@ -430,18 +430,19 @@ export default function AppLayout() {
               />
 
               <Playback>
+                
                 <PlaybackControls
                   wavesurfer={wavesurfer}
                   onLike={() => console.log("Liked")}
                   onDislike={() => console.log("Disliked")}
                 />
               </Playback>
+
             </ViewerBox>
           </Viewer>
-
           {/* … bottom panels … */}
         </MainArea>
       </ContentWrapper>
     </AppRoot>
   );
-}
+};
