@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import WaveSurfer from 'wavesurfer.js';
-import SpectrogramPlugin from "wavesurfer.js/dist/plugins/spectrogram.esm.js";
+import SpectrogramPlugin from 'wavesurfer.js/dist/plugins/spectrogram.esm.js';
 import styled from 'styled-components';
 
 const Container = styled.div`
@@ -10,12 +10,10 @@ const Container = styled.div`
   flex-direction: column;
   width: 100%;
 `;
-
 const WaveformWrapper = styled.div`
   width: 100%;
   height: 100px;
 `;
-
 const SpectrogramWrapper = styled.div`
   width: 100%;
   height: 128px;
@@ -23,79 +21,100 @@ const SpectrogramWrapper = styled.div`
   cursor: crosshair;
 `;
 
-/**
- * Spectrogram component using WaveSurfer + Spectrogram plugin.
- * Props:
- *   audioUrl: string – arquivo de áudio
- *   onReady?: fn – recebe a instância do WaveSurfer
- *   onClickTimeFreq?: fn – recebe { time, freq } ao clicar
- */
 const Spectrogram = ({ audioUrl, onReady, onClickTimeFreq }) => {
-  const waveformRef   = useRef(null);
+  const waveformRef    = useRef(null);
   const spectrogramRef = useRef(null);
+  const wsRef          = useRef(null);
+  let freqData         = null;
 
   useEffect(() => {
-    const wavesurfer = WaveSurfer.create({
-      container: waveformRef.current,
-      waveColor: '#888',
+    // 1) Cria instância
+    const ws = WaveSurfer.create({
+      container:     waveformRef.current,
+      waveColor:     '#888',
       progressColor: '#5c6bc0',
-      cursorColor: '#fff',
-      scrollParent: true,
-      backend: 'WebAudio',
-      height: 100,
-      responsive: true,
-      plugins: [
-        SpectrogramPlugin.create({
-          container: spectrogramRef.current,
-          labels: true,
-          height: 128,
-        }),
-      ],
+      cursorColor:   '#fff',
+      scrollParent:  true,
+      backend:       'WebAudio',
+      height:        100,
+      responsive:    true,
     });
 
-    // passa instância para o pai
+    // 2) Cria plugin de espectrograma
+    const spectrogramPlugin = SpectrogramPlugin.create({
+      container:     spectrogramRef.current,
+      labels:        true,
+      height:        128,
+      splitChannels: false,
+      fftSamples:    1024,
+    });
+    ws.registerPlugin(spectrogramPlugin);
+    wsRef.current = ws;
+
     if (typeof onReady === 'function') {
-      onReady(wavesurfer);
+      onReady(ws);
     }
 
-    // carrega áudio
-    wavesurfer.load(audioUrl);
+    ws.load(audioUrl);
 
-    // listener de clique para calcular t e f
-    const specEl = spectrogramRef.current;
-    const handleClick = e => {
-      const rect   = specEl.getBoundingClientRect();
-      const x      = e.clientX - rect.left;
-      const y      = e.clientY - rect.top;
-      const width  = rect.width;
-      const height = rect.height;
+    // 3) Quando pronto, captura dados brutos
+    ws.on('ready', async () => {
+      try {
+        freqData = await spectrogramPlugin.getFrequenciesData();
+      } catch (err) {
+        console.error('Failed to get spectrogram data:', err);
+      }
+      // anexa clique após o plugin desenhar o canvas
+      const c = spectrogramRef.current.querySelector('canvas');
+      if (c) {
+        c.addEventListener('click', handleClick);
+      }
+    });
 
-      const duration = wavesurfer.getDuration() || 0;
-      const time     = (x / width) * duration;
-
-      const sr      = wavesurfer.backend.buffer?.sampleRate || 44100;
-      const nyquist = sr / 2;
-      const freq    = ((height - y) / height) * nyquist;
-
-      if (typeof onClickTimeFreq === 'function') {
-        onClickTimeFreq({ time, freq });
-      } else {
-        console.log(
-          `Clique: t=${time.toFixed(2)}s, f=${freq.toFixed(0)}Hz`
-        );
+    // 4) Cleanup
+    return () => {
+      const c = spectrogramRef.current.querySelector('canvas');
+      if (c) {
+        c.removeEventListener('click', handleClick);
+      }
+      try {
+        ws.destroy();
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          console.error(err);
+        }
       }
     };
+  }, [audioUrl]); // recria instância e plugin se url mudar
 
-    specEl.addEventListener('click', handleClick);
+  // handler utiliza freqData e wsRef
+  function handleClick(e) {
+    const ws     = wsRef.current;
+    const canvas = spectrogramRef.current.querySelector('canvas');
+    if (!canvas || !ws || !freqData) return;
 
-    // cleanup
-    return () => {
-      specEl.removeEventListener('click', handleClick);
-      wavesurfer.destroy();
-    };
-  // só refaz quando mudar o áudio
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [audioUrl]);
+    const { left, top, width, height } = canvas.getBoundingClientRect();
+    const x = e.clientX - left;
+    const y = e.clientY - top;
+
+    const timeIndex = Math.floor((x / width) * freqData.length);
+    const freqIndex = Math.floor(((height - y) / height) * freqData[0].length);
+    const ti = Math.max(0, Math.min(freqData.length - 1, timeIndex));
+    const fi = Math.max(0, Math.min(freqData[0].length - 1, freqIndex));
+
+    const amp      = freqData[ti][fi];
+    const duration = ws.getDuration() || 0;
+    const time     = (ti / freqData.length) * duration;
+    const sr       = ws.backend.buffer?.sampleRate || 44100;
+    const freq     = (fi / freqData[0].length) * (sr / 2);
+
+    const info = { time, freq, amplitude: amp };
+    if (typeof onClickTimeFreq === 'function') {
+      onClickTimeFreq(info);
+    } else {
+      console.log(`t=${time.toFixed(2)}s, f=${freq.toFixed(0)}Hz, amp=${amp}`);
+    }
+  }
 
   return (
     <Container>
@@ -106,13 +125,12 @@ const Spectrogram = ({ audioUrl, onReady, onClickTimeFreq }) => {
 };
 
 Spectrogram.propTypes = {
-  audioUrl: PropTypes.string.isRequired,
-  onReady: PropTypes.func,
-  onClickTimeFreq: PropTypes.func,
+  audioUrl:       PropTypes.string.isRequired,
+  onReady:        PropTypes.func,
+  onClickTimeFreq:PropTypes.func,
 };
-
 Spectrogram.defaultProps = {
-  onReady: null,
+  onReady:         null,  
   onClickTimeFreq: null,
 };
 

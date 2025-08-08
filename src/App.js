@@ -1,9 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import styled from "styled-components";
-import Spectrogram from './Spectrogram';
-import WaveSurfer from "wavesurfer.js";
-import SpectrogramPlugin from "wavesurfer.js/dist/plugins/spectrogram.esm.js";
-import PlaybackControls from './PlaybackControls';
+import SpectrogramOnClick from "./SpectrogramOnClick";
+import PlaybackControls from "./PlaybackControls";
+
 const theme = {
   bg: "#0f111a",
   card: "#1f2430",
@@ -395,184 +394,52 @@ export const BtnFull = styled(Btn)`
   width: 100%;
 `;
 
-
 export default function AppLayout() {
-  const [audioUrl, setAudioUrl] = useState("/audio/whale.mp3");
+  const [audioUrl]    = useState("/audio/whale.mp3");
   const [wavesurfer, setWavesurfer] = useState(null);
-  return (
 
+  // memorizo o callback de ready
+  const handleReady = useCallback(ws => {
+    setWavesurfer(ws);
+  }, []);
+
+  // memorizo o callback de click
+  const handleClickTF = useCallback(({ time, freq, magnitude }) => {
+    console.log(
+      `Tempo: ${time.toFixed(2)}s, Freq: ${freq.toFixed(0)}Hz, Mag: ${magnitude}`
+    );
+  }, []);
+
+  return (
     <AppRoot>
-      <Topbar>
-        <Title>Audio Annotations</Title>
-        <Actions>
-          <Subtitle>Funchal Bay 2022</Subtitle>
-          <Btn>Upload</Btn>
-        </Actions>
-      </Topbar>
+      {/* … Topbar, sidebars … */}
 
       <ContentWrapper>
-        <LeftControls>
-          <SectionLabel>SELECT / EDITs</SectionLabel>
-          <CtrlSection>
-            <CtrlColumn>
-              <IconBtn title="Box Select"><img src="/img/box_select1.png" alt="select" /></IconBtn>
-              <IconBtn title="Text Box"><img src="/img/text-box1.png" alt="text" /></IconBtn>
-              <IconBtn title="Draw"><img src="/img/draw1.png" alt="draw" /></IconBtn>
-              <IconBtn title="Info"><img src="/img/info1.png" alt="info" /></IconBtn>
-            </CtrlColumn>
-          </CtrlSection>
-          <SectionLabel>INFO / VIEW</SectionLabel>
-          <CtrlSection>
-            <CtrlColumn>
-              <IconBtn title="Info"><img src="/img/info1.png" alt="info" /></IconBtn>
-              <IconBtn title="View"><img src="/img/view1.png" alt="view" /></IconBtn>
-            </CtrlColumn>
-          </CtrlSection>
-          <Divider />
-          <SectionLabel>UTILITIES</SectionLabel>
-          <CtrlSection>
-            <CtrlColumn>
-              <IconBtn title="Upload"><img src="/img/scroll1.png" alt="upload" /></IconBtn>
-              <IconBtn title="Screenshot"><img src="/img/print1.png" alt="screenshot" /></IconBtn>
-              <IconBtn title="Time"><img src="/img/clock_plus1.png" alt="time" /></IconBtn>
-            </CtrlColumn>
-          </CtrlSection>
-          <Divider />
-          <SectionLabel>AUDIO / AI</SectionLabel>
-          <CtrlSection>
-            <CtrlColumn>
-              <IconBtn title="Mute"><img src="/img/mute1.png" alt="mute" /></IconBtn>
-              <IconBtn title="Speedometer"><img src="/img/speedometer1.png" alt="speed" /></IconBtn>
-              <IconBtn title="+10s"><img src="/img/forward1.png" alt="forward" /></IconBtn>
-              <IconBtn title="AI"><img src="/img/ai1.png" alt="ai" /></IconBtn>
-            </CtrlColumn>
-          </CtrlSection>
-        </LeftControls>
-
-        <TagSidebar>
-          <Panel>
-            <PanelTitle>Objects</PanelTitle>
-            <ItemList>
-              <Item>dolphin</Item>
-              <Item>whale</Item>
-              <Item>seal</Item>
-              <Item>turtle</Item>
-            </ItemList>
-          </Panel>
-          <Panel>
-            <PanelTitle>Events</PanelTitle>
-            <ItemList>
-              <Item>noise</Item>
-              <Item>nothing</Item>
-            </ItemList>
-          </Panel>
-          <Panel>
-            <PanelTitle>Tags</PanelTitle>
-            <ItemList>
-              <TagItem>example-tag-1</TagItem>
-              <TagItem>example-tag-2</TagItem>
-            </ItemList>
-          </Panel>
-        </TagSidebar>
+        {/* … LeftControls, TagSidebar … */}
 
         <MainArea>
           <Viewer>
             <ViewerHeader>
-              <Badge>Waveform / Visualization placeholder</Badge>
+              <Badge>Spectrogram / Waveform</Badge>
             </ViewerHeader>
             <ViewerBox>
-              <Placeholder>
-                <Spectrogram
-                  audioUrl={audioUrl}
-                  onReady={instance => setWavesurfer(instance)}
-
-
-                  onClickTimeFreq={({ time, freq }) => {
-                    // ex.: store em state ou mostrar num tooltip
-                    console.log('UTC:', time, 'Hz:', freq);
-                  }}
-
-                />
-
-                <OverlayLabel>
-                  Waveform / Visualization placeholder
-                </OverlayLabel>
-              </Placeholder>
+              <SpectrogramOnClick
+                audioUrl={audioUrl}
+                onReady={handleReady}
+                onClickTimeFreq={handleClickTF}
+              />
 
               <Playback>
                 <PlaybackControls
                   wavesurfer={wavesurfer}
-                  onLike={() => console.log('liked')}
-                  onDislike={() => console.log('disliked')}
+                  onLike={() => console.log("Liked")}
+                  onDislike={() => console.log("Disliked")}
                 />
               </Playback>
             </ViewerBox>
           </Viewer>
 
-          <Bottom>
-            <BottomGrid>
-              <Annotations>
-                <PanelHeader>
-                  <PanelTitle>Annotations</PanelTitle>
-                  <PanelMeta>Filter / Search</PanelMeta>
-                </PanelHeader>
-                <TableWrapper>
-                  <Table>
-                    <thead>
-                      <tr>
-                        <Th>ID</Th>
-                        <Th>Begin (s)</Th>
-                        <Th>End (s)</Th>
-                        <Th>High Freq (Hz)</Th>
-                        <Th>Low Freq (Hz)</Th>
-                        <Th>Class</Th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <Td>1</Td>
-                        <Td>5.0434</Td>
-                        <Td>6.6921</Td>
-                        <Td>7252</Td>
-                        <Td>2286</Td>
-                        <Td>dolphin</Td>
-                      </tr>
-                      <tr>
-                        <Td>2</Td>
-                        <Td>5.0434</Td>
-                        <Td>6.6921</Td>
-                        <Td>7252</Td>
-                        <Td>2286</Td>
-                        <Td>whale</Td>
-                      </tr>
-                    </tbody>
-                  </Table>
-                </TableWrapper>
-              </Annotations>
-              <FilesPanel>
-                <PanelHeader>
-                  <PanelTitle>Files</PanelTitle>
-                </PanelHeader>
-                <FileList>
-                  <FileItem>
-                    <FileName>sound 8 - 2022-06-05_15_26_AMP.wav</FileName>
-                    <FileActions>
-                      <SmallBtn title="Play">▶️</SmallBtn>
-                      <SmallBtn title="Download">⬇️</SmallBtn>
-                    </FileActions>
-                  </FileItem>
-                  <FileItem>
-                    <FileName>sound 7 - 2022-06-05_15_26_AMP.wav</FileName>
-                    <FileActions>
-                      <SmallBtn title="Play">▶️</SmallBtn>
-                      <SmallBtn title="Download">⬇️</SmallBtn>
-                    </FileActions>
-                  </FileItem>
-                </FileList>
-                <BtnFull>Add File</BtnFull>
-              </FilesPanel>
-            </BottomGrid>
-          </Bottom>
+          {/* … bottom panels … */}
         </MainArea>
       </ContentWrapper>
     </AppRoot>
