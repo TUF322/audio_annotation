@@ -1,3 +1,4 @@
+// SpectrogramOnClick.jsx
 import React, { useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import WaveSurfer from 'wavesurfer.js';
@@ -17,38 +18,32 @@ const WaveformWrapper = styled.div`
 `;
 
 const SpectrogramWrapper = styled.div`
-  position: relative;                /* importante p/ z-index funcionar */
+  position: relative;          /* chave: vira âncora do overlay */
   width: 100%;
   height: 128px;
   margin-top: 12px;
-  cursor: crosshair;
-
-  .spec-overlay {
-    position: absolute;
-    inset: 0;
-    z-index: 5;                      /* fica por cima do heatmap */
-    width: 100%;
-    height: 100%;
-    pointer-events: none;            /* clique passa para o canvas do plugin */
-  }
 `;
 
-
-const Overlay = styled.canvas`
+const OverlayCanvas = styled.canvas`
   position: absolute;
   inset: 0;
-  /* captura clique acima do canvas do plugin */
+  z-index: 3;                  /* fica por cima do heatmap */
+  pointer-events: auto;        /* recebe cliques */
 `;
 
 const SpectrogramOnClick = ({ audioUrl, onReady, onClickTimeFreq }) => {
   const waveformRef    = useRef(null);
-  const spectroWrapRef = useRef(null);   // container do plugin
-  const overlayRef     = useRef(null);   // canvas overlay
+  const spectrogramRef = useRef(null);      // container onde o plugin desenha
+  const overlayRef     = useRef(null);      // nosso canvas por cima
   const wsRef          = useRef(null);
-  const srRef          = useRef(44100);  // sample rate fallback
+  const specPluginRef  = useRef(null);
 
-  // cria wavesurfer + plugin apenas 1x
+  // guardas pra conversão y -> Hz
+  const fminRef = useRef(0);
+  const fmaxRef = useRef(22050);
+
   useEffect(() => {
+    // 1) cria WaveSurfer
     const ws = WaveSurfer.create({
       container:     waveformRef.current,
       waveColor:     '#888',
@@ -58,113 +53,158 @@ const SpectrogramOnClick = ({ audioUrl, onReady, onClickTimeFreq }) => {
       backend:       'WebAudio',
       height:        100,
       responsive:    true,
-      plugins: [
-        SpectrogramPlugin.create({
-          container:    spectroWrapRef.current,
-          labels:       true,
-          height:       128,
-          splitChannels:false,            // evita duplicar por canal
-          scale:        'linear',         // mapeamento Y->Hz linear
-          // frequencyMin: 0,             // opcional
-          // frequencyMax: será sr/2; o plugin já assume isso por padrão
-        })
-      ],
     });
     wsRef.current = ws;
-    onReady && onReady(ws);
 
-    // quando pronto, obtem sampleRate e ajusta overlay
-    const onWsReady = () => {
-      const sr = ws.backend?.buffer?.sampleRate;
-      if (sr) srRef.current = sr;
+    // 2) cria plugin de espectrograma e registra
+    const spec = SpectrogramPlugin.create({
+      container:     spectrogramRef.current,
+      labels:        true,
+      height:        128,
+      splitChannels: false,
+      fftSamples:    1024,
+      scale:         'linear',            // <— linear pra conversão direta
+      // frequencyMax será ajustado quando o áudio estiver pronto
+    });
+    ws.registerPlugin(spec);
+    specPluginRef.current = spec;
 
-      resizeOverlay();  // ajusta tamanho do canvas overlay
-    };
-    ws.on('ready', onWsReady);
+    // 3) expõe a instância pro pai
+    if (typeof onReady === 'function') onReady(ws);
 
-    // limpa no unmount
-    return () => {
-      ws.un('ready', onWsReady);
+    // 4) quando pronto, ajusta faixa de frequências (0 .. nyquist)
+    ws.on('ready', () => {
+      const sr = ws.backend?.buffer?.sampleRate || 44100;
+      fminRef.current = 0;
+      fmaxRef.current = sr / 2;
+
+      // alguns builds do plugin suportam setOptions; se não suportar, ignore.
       try {
-        ws.stop();      // pode disparar AbortError internamente
+        spec.setOptions?.({ frequencyMin: 0, frequencyMax: fmaxRef.current, scale: 'linear' });
+      } catch (_) {}
+
+      // sincroniza overlay com o canvas do espectrograma
+      syncOverlaySize();
+    });
+
+    // 5) carregar áudio
+    ws.load(audioUrl);
+
+    // 6) ResizeObserver mantém overlay = mesmo tamanho do canvas do plugin
+    const ro = new ResizeObserver(() => syncOverlaySize());
+    // observar o container (o canvas do plugin é filho)
+    if (spectrogramRef.current) ro.observe(spectrogramRef.current);
+
+    // 7) clique no overlay
+    const overlay = overlayRef.current;
+    const handleClick = (e) => {
+      const ws  = wsRef.current;
+      if (!ws || !overlay) return;
+
+      const rect = overlay.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      // tempo (largura do overlay corresponde à duração)
+      const duration = ws.getDuration() || 0;
+      const time = (x / rect.width) * duration;
+
+      // frequência (escala linear definida no plugin)
+      const fmin = fminRef.current;
+      const fmax = fmaxRef.current;
+      const freq = fmin + (1 - y / rect.height) * (fmax - fmin);
+
+      // desenha uma marquinha/label no overlay
+      drawMarker(x, y, `${(freq / 1000).toFixed(2)} kHz`);
+
+      if (typeof onClickTimeFreq === 'function') {
+        onClickTimeFreq({ time, freq, magnitude: null });
+      } else {
+        console.log(`Tempo: ${time.toFixed(2)}s, Freq: ${freq.toFixed(0)}Hz, Mag: null`);
+      }
+    };
+    overlay?.addEventListener('click', handleClick);
+
+    // cleanup
+    return () => {
+      overlay?.removeEventListener('click', handleClick);
+      ro.disconnect();
+      try {
         ws.destroy();
       } catch (err) {
         if (err?.name !== 'AbortError') console.error(err);
       }
     };
-  }, [onReady]);
+  }, [audioUrl, onReady, onClickTimeFreq]);
 
-  // carrega o áudio sempre que a URL muda
-  useEffect(() => {
-    wsRef.current?.load(audioUrl);
-  }, [audioUrl]);
+  // — helpers —
 
-  // mantém overlay com DPI correto
-  useEffect(() => {
-    const ro = new ResizeObserver(resizeOverlay);
-    const el = spectroWrapRef.current;
-    if (el) ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  function resizeOverlay() {
+  // deixa o overlay exatamente no mesmo tamanho “real” do canvas do plugin
+  const syncOverlaySize = () => {
     const overlay = overlayRef.current;
-    const wrap    = spectroWrapRef.current;
-    if (!overlay || !wrap) return;
-    const rect = wrap.getBoundingClientRect();
-    const dpr  = window.devicePixelRatio || 1;
-    overlay.width  = Math.max(1, Math.floor(rect.width  * dpr));
-    overlay.height = Math.max(1, Math.floor(rect.height * dpr));
-    overlay.style.width  = `${rect.width}px`;
-    overlay.style.height = `${rect.height}px`;
-    // opcional: limpar overlay
+    const container = spectrogramRef.current;
+    if (!overlay || !container) return;
+
+    // o plugin usa CSS para dimensionar; igualamos o nosso
+    const { width, height } = container.getBoundingClientRect();
+    overlay.style.width  = `${width}px`;
+    overlay.style.height = `${height}px`;
+
+    // e ajustamos o buffer interno pra densidade de pixels (nítido)
+    const dpr = window.devicePixelRatio || 1;
+    overlay.width  = Math.max(1, Math.floor(width  * dpr));
+    overlay.height = Math.max(1, Math.floor(height * dpr));
+
     const ctx = overlay.getContext('2d');
-    ctx.clearRect(0, 0, overlay.width, overlay.height);
-  }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // escala o sistema de coords
+    clearOverlay();
+  };
 
-  function handleClick(e) {
-    const ws      = wsRef.current;
+  const clearOverlay = () => {
     const overlay = overlayRef.current;
-    const wrap    = spectroWrapRef.current;
-    if (!ws || !overlay || !wrap) return;
+    if (!overlay) return;
+    const ctx = overlay.getContext('2d');
+    const { width, height } = overlay.getBoundingClientRect();
+    ctx.clearRect(0, 0, width, height);
+  };
 
-    const rect = wrap.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+  const drawMarker = (x, y, label) => {
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+    const ctx = overlay.getContext('2d');
+    const { width, height } = overlay.getBoundingClientRect();
 
-    const relX = x / rect.width;
-    const relY = y / rect.height;
+    clearOverlay();
 
-    // tempo (s): relativo ao comprimento do áudio
-    const duration = ws.getDuration() || 0;
-    const time = Math.max(0, Math.min(duration, relX * duration));
-
-    // frequência (Hz): linear entre 0 e Nyquist
-    const nyquist = srRef.current / 2;
-    const freqHz  = (1 - relY) * nyquist;   // topo = nyquist, base = 0 Hz
-
-    // desenha linha horizontal no overlay (opcional)
-    const ctx   = overlay.getContext('2d');
-    const dpr   = window.devicePixelRatio || 1;
-    const yPix  = Math.round(relY * overlay.height);
-    ctx.clearRect(0, 0, overlay.width, overlay.height);
+    // linha horizontal
+    ctx.strokeStyle = 'rgba(255,255,0,0.9)';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(0, yPix);
-    ctx.lineTo(overlay.width, yPix);
-    ctx.lineWidth   = 2 * dpr;
-    ctx.strokeStyle = 'yellow';
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
     ctx.stroke();
 
-    onClickTimeFreq
-      ? onClickTimeFreq({ time, freq: freqHz, magnitude: null })
-      : console.log(`t=${time.toFixed(2)}s, f=${(freqHz/1000).toFixed(2)} kHz`);
-  }
+    // *tooltip* simples
+    const pad = 6;
+    ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto';
+    const tm = ctx.measureText(label);
+    const tw = tm.width + pad * 2;
+    const th = 18;
+
+    let tx = Math.min(Math.max(4, x + 8), width - tw - 4);
+    let ty = Math.max(th + 4, y - 8);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.fillRect(tx, ty - th, tw, th);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(label, tx + pad, ty - 5);
+  };
 
   return (
     <Container>
       <WaveformWrapper ref={waveformRef} />
-      <SpectrogramWrapper ref={spectroWrapRef}>
-        <Overlay ref={overlayRef} onClick={handleClick} />
+      <SpectrogramWrapper ref={spectrogramRef}>
+        <OverlayCanvas ref={overlayRef} />
       </SpectrogramWrapper>
     </Container>
   );
