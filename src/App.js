@@ -13,6 +13,7 @@ const theme = {
   primary: "#5c6bc0",
 };
 
+
 // Layout root
 export const AppRoot = styled.div`
   display: flex;
@@ -198,7 +199,6 @@ export const ViewerBox = styled.div`
 `;
 
 export const Placeholder = styled.div`
-  
   position: relative;
   flex: 1;
   background: #1b1f31;
@@ -208,7 +208,7 @@ export const Placeholder = styled.div`
   align-items: center;
   justify-content: center;
 `;
-//pointer-events: none;
+
 export const PlaceholderImg = styled.img`
   max-width: 100%;
   max-height: 100%;
@@ -297,6 +297,7 @@ export const Time = styled.div`
   text-align: center;
 `;
 
+// Bottom panels
 export const Bottom = styled.section`
   padding: 16px;
   background: transparent;
@@ -398,12 +399,10 @@ export default function AppLayout() {
   const [audioUrl] = useState("/audio/whale.mp3");
   const [wavesurfer, setWavesurfer] = useState(null);
 
-  // memorizo o callback de ready
   const handleReady = useCallback(ws => {
     setWavesurfer(ws);
   }, []);
 
-  // memorizo o callback de click
   const handleClickTF = useCallback(({ time, freq, magnitude }) => {
     console.log(
       `Tempo: ${time.toFixed(2)}s, Freq: ${freq.toFixed(0)}Hz, Mag: ${magnitude}`
@@ -412,11 +411,84 @@ export default function AppLayout() {
 
   return (
     <AppRoot>
-      {/* … Topbar, sidebars … */}
+      {/* Cabeçalho estático */}
+      <Topbar>
+        <Title>Audio Annotations</Title>
+        <Actions>
+          <Subtitle>Funchal Bay 2022</Subtitle>
+          <Btn>Upload</Btn>
+        </Actions>
+      </Topbar>
 
+      {/* Conteúdo principal com sidebars */}
       <ContentWrapper>
-        {/* … LeftControls, TagSidebar … */}
+        {/* LeftControls */}
+        <LeftControls>
+          <SectionLabel>SELECT / EDIT</SectionLabel>
+          <CtrlSection>
+            <CtrlColumn>
+              <IconBtn title="Box Select"><img src="/img/box_select1.png" alt="select" /></IconBtn>
+              <IconBtn title="Text Box"><img src="/img/text-box1.png" alt="text" /></IconBtn>
+              <IconBtn title="Draw"><img src="/img/draw1.png" alt="draw" /></IconBtn>
+              <IconBtn title="Info"><img src="/img/info1.png" alt="info" /></IconBtn>
+            </CtrlColumn>
+          </CtrlSection>
+          <SectionLabel>INFO / VIEW</SectionLabel>
+          <CtrlSection>
+            <CtrlColumn>
+              <IconBtn title="Info"><img src="/img/info1.png" alt="info" /></IconBtn>
+              <IconBtn title="View"><img src="/img/view1.png" alt="view" /></IconBtn>
+            </CtrlColumn>
+          </CtrlSection>
+          <Divider />
+          <SectionLabel>UTILITIES</SectionLabel>
+          <CtrlSection>
+            <CtrlColumn>
+              <IconBtn title="Upload"><img src="/img/scroll1.png" alt="upload" /></IconBtn>
+              <IconBtn title="Screenshot"><img src="/img/print1.png" alt="screenshot" /></IconBtn>
+              <IconBtn title="Time"><img src="/img/clock_plus1.png" alt="time" /></IconBtn>
+            </CtrlColumn>
+          </CtrlSection>
+          <Divider />
+          <SectionLabel>AUDIO / AI</SectionLabel>
+          <CtrlSection>
+            <CtrlColumn>
+              <IconBtn title="Mute"><img src="/img/mute1.png" alt="mute" /></IconBtn>
+              <IconBtn title="Speedometer"><img src="/img/speedometer1.png" alt="speed" /></IconBtn>
+              <IconBtn title="+10s"><img src="/img/forward1.png" alt="forward" /></IconBtn>
+              <IconBtn title="AI"><img src="/img/ai1.png" alt="ai" /></IconBtn>
+            </CtrlColumn>
+          </CtrlSection>
+        </LeftControls>
 
+        {/* Sidebar de tags */}
+        <TagSidebar>
+          <Panel>
+            <PanelTitle>Objects</PanelTitle>
+            <ItemList>
+              <Item>dolphin</Item>
+              <Item>whale</Item>
+              <Item>seal</Item>
+              <Item>turtle</Item>
+            </ItemList>
+          </Panel>
+          <Panel>
+            <PanelTitle>Events</PanelTitle>
+            <ItemList>
+              <Item>noise</Item>
+              <Item>nothing</Item>
+            </ItemList>
+          </Panel>
+          <Panel>
+            <PanelTitle>Tags</PanelTitle>
+            <ItemList>
+              <TagItem>example-tag-1</TagItem>
+              <TagItem>example-tag-2</TagItem>
+            </ItemList>
+          </Panel>
+        </TagSidebar>
+
+        {/* Área principal */}
         <MainArea>
           <Viewer>
             <ViewerHeader>
@@ -428,21 +500,71 @@ export default function AppLayout() {
                 onReady={handleReady}
                 onClickTimeFreq={handleClickTF}
               />
-
               <Playback>
-                
                 <PlaybackControls
                   wavesurfer={wavesurfer}
                   onLike={() => console.log("Liked")}
                   onDislike={() => console.log("Disliked")}
                 />
               </Playback>
-
             </ViewerBox>
           </Viewer>
-          {/* … bottom panels … */}
+          
+          {/* bottom panels */}
+          <Bottom>
+            <BottomGrid>
+              <Annotations>
+                <PanelHeader>
+                  <PanelTitle>Annotations</PanelTitle>
+                  <PanelMeta>Filter / Search</PanelMeta>
+                </PanelHeader>
+                <TableWrapper>
+                  <Table>
+                    <thead>
+                      <tr>
+                        <Th>ID</Th><Th>Begin (s)</Th><Th>End (s)</Th>
+                        <Th>High Freq (Hz)</Th><Th>Low Freq (Hz)</Th><Th>Class</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <Td>1</Td><Td>5.0434</Td><Td>6.6921</Td>
+                        <Td>7252</Td><Td>2286</Td><Td>dolphin</Td>
+                      </tr>
+                      <tr>
+                        <Td>2</Td><Td>5.0434</Td><Td>6.6921</Td>
+                        <Td>7252</Td><Td>2286</Td><Td>whale</Td>
+                      </tr>
+                    </tbody>
+                  </Table>
+                </TableWrapper>
+              </Annotations>
+              <FilesPanel>
+                <PanelHeader>
+                  <PanelTitle>Files</PanelTitle>
+                </PanelHeader>
+                <FileList>
+                  <FileItem>
+                    <FileName>sound 8 - 2022-06-05_15_26_AMP.wav</FileName>
+                    <FileActions>
+                      <SmallBtn title="Play">▶️</SmallBtn>
+                      <SmallBtn title="Download">⬇️</SmallBtn>
+                    </FileActions>
+                  </FileItem>
+                  <FileItem>
+                    <FileName>sound 7 - 2022-06-05_15_26_AMP.wav</FileName>
+                    <FileActions>
+                      <SmallBtn title="Play">▶️</SmallBtn>
+                      <SmallBtn title="Download">⬇️</SmallBtn>
+                    </FileActions>
+                  </FileItem>
+                </FileList>
+                <BtnFull>Add File</BtnFull>
+              </FilesPanel>
+            </BottomGrid>
+          </Bottom>
         </MainArea>
       </ContentWrapper>
     </AppRoot>
   );
-};
+}
