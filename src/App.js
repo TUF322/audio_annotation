@@ -1,5 +1,6 @@
 import React from "react";
 import styled from "styled-components";
+import SpectroplotInPlaceholder from "./SpectroplotInPlaceholder";
 
 const theme = {
   bg: "#0f111a",
@@ -476,13 +477,13 @@ export default function AppLayout() {
             </ViewerHeader>
             <ViewerBox>
               <Placeholder>
-                <PlaceholderImg
-                  src="/img/placeholder.png"
-                  alt="placeholder"
+                <SpectroplotInPlaceholder
+                  audioUrl="/audio/whale.mp3"
+                  onClickTimeFreq={({ time, freq }) =>
+                    console.log('click:', time?.toFixed?.(3), 's |', (freq / 1000)?.toFixed?.(2), 'kHz')
+                  }
                 />
-                <OverlayLabel>
-                  Waveform / Visualization placeholder
-                </OverlayLabel>
+                <OverlayLabel>Spectrogram</OverlayLabel>
               </Placeholder>
 
               <Playback>
@@ -497,7 +498,7 @@ export default function AppLayout() {
                   <ScrollBarContainer>
                     <ScrollBar><ScrollThumb /></ScrollBar>
                   </ScrollBarContainer>
-                  
+
                   <Time>00:12 / 03:45</Time>
                 </ProgressWrapper>
               </Playback>
