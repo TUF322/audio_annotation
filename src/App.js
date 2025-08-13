@@ -1,7 +1,12 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import styled from "styled-components";
 import SpectrogramOnClick from "./SpectrogramOnClick";
 import PlaybackControls from "./PlaybackControls";
+import SidebarControls from "./SidebarControls";
+import RegionMenu from "./RegionMenu"; 
+
+
+
 
 const theme = {
   bg: "#0f111a",
@@ -396,18 +401,161 @@ export const BtnFull = styled(Btn)`
 `;
 
 export default function AppLayout() {
-  const [audioUrl] = useState("/audio/whale.mp3");
+  const [audioUrl] = useState("/audio/10hz.mp3");
   const [wavesurfer, setWavesurfer] = useState(null);
 
-  const handleReady = useCallback(ws => {
+  // toggle seleção (Sidebar)
+  const [selectionEnabled, setSelectionEnabled] = useState(false);
+  const selectedRegionIdRef = useRef(null);
+
+  // IDs e tabela
+  const idMapRef = useRef(new Map()); // region.id (string) -> uid (num)
+  const [nextUid, setNextUid] = useState(1);
+  const [annotations, setAnnotations] = useState([]);
+
+  // mini menu da region (se usares RegionMenu.jsx)
+  const [menuState, setMenuState] = useState({
+    visible: false,
+    left: 12,
+    top: 8,
+    selectedUid: null,
+  });
+
+  const handleToggleSelection = useCallback(() => {
+    setSelectionEnabled((v) => !v);
+  }, []);
+
+  const handleReady = useCallback((ws) => {
     setWavesurfer(ws);
   }, []);
 
-  const handleClickTF = useCallback(({ time, freq, magnitude }) => {
-    console.log(
-      `Tempo: ${time.toFixed(2)}s, Freq: ${freq.toFixed(0)}Hz, Mag: ${magnitude}`
-    );
-  }, []);
+  // receber eventos do viewer (created/updated/selected/removed)
+  const handleRegionChange = useCallback(
+    (evt) => {
+      const { type, region, menuPos } = evt;
+      const rid = region.id;
+
+      // manter seleção por id interno do plugin
+      if (type === "selected") {
+        selectedRegionIdRef.current = rid;
+      }
+      if (type === "removed" && selectedRegionIdRef.current === rid) {
+        selectedRegionIdRef.current = null;
+      }
+
+      // atribuir UID estável
+      if (!idMapRef.current.has(rid)) {
+        idMapRef.current.set(rid, nextUid);
+        setNextUid((n) => n + 1);
+      }
+      const uid = idMapRef.current.get(rid);
+
+      // métricas (medidas reais, se vieram do viewer)
+      const lowHz = region?.data?.metrics?.lowHz ?? 0;
+      const highHz = region?.data?.metrics?.highHz ?? 0;
+
+      setAnnotations((prev) => {
+        const idx = prev.findIndex((a) => a.regionId === rid);
+        const base = {
+          uid,
+          regionId: rid,
+          start: region.start,
+          end: region.end,
+          lowHz,
+          highHz,
+          className: idx >= 0 ? prev[idx].className : "", // mantém classe se existir
+        };
+
+        if (type === "removed") {
+          if (idx === -1) return prev;
+          const clone = prev.slice();
+          clone.splice(idx, 1);
+          return clone;
+        }
+
+        if (idx === -1) return [...prev, base];
+        const clone = prev.slice();
+        clone[idx] = { ...clone[idx], ...base };
+        return clone;
+      });
+
+      if (type === "selected") {
+        setMenuState({
+          visible: true,
+          left: menuPos?.left ?? 12,
+          top: menuPos?.top ?? 8,
+          selectedUid: uid,
+        });
+      }
+      if (type === "removed") {
+        setMenuState((m) =>
+          m.selectedUid === uid ? { ...m, visible: false } : m
+        );
+      }
+    },
+    [nextUid]
+  );
+
+  // Sidebar: apagar region selecionada
+  const handleDeleteSelected = useCallback(() => {
+    if (!wavesurfer) return;
+    const regions = wavesurfer?.plugins?.regions;
+    const id = selectedRegionIdRef.current;
+    if (!regions || !id) return;
+    regions.getRegion?.(id)?.remove();
+  }, [wavesurfer]);
+
+  // Sidebar: colorir region selecionada (classe CSS)
+  const handleColorSelected = useCallback(
+    (className) => {
+      if (!wavesurfer) return;
+      const regions = wavesurfer?.plugins?.regions;
+      const id = selectedRegionIdRef.current;
+      if (!regions || !id) return;
+      const r = regions.getRegion?.(id);
+      if (!r) return;
+      r.removeClass?.("region-green");
+      r.removeClass?.("region-blue");
+      r.addClass?.(className) ?? r.element?.classList?.add(className);
+    },
+    [wavesurfer]
+  );
+
+  // RegionMenu: setar classe na linha + aplicar cor visual
+  const handleSetClass = useCallback(
+    (value) => {
+      setAnnotations((prev) => {
+        const idx = prev.findIndex((a) => a.uid === menuState.selectedUid);
+        if (idx === -1) return prev;
+        const clone = prev.slice();
+        clone[idx] = { ...clone[idx], className: value };
+        return clone;
+      });
+    },
+    [menuState.selectedUid]
+  );
+
+  const handleMenuColor = useCallback(
+    (className) => {
+      if (!wavesurfer) return;
+      const regions = wavesurfer?.plugins?.regions;
+      const row = annotations.find((a) => a.uid === menuState.selectedUid);
+      if (!regions || !row) return;
+      const r = regions.getRegion?.(row.regionId);
+      r?.removeClass?.("region-green");
+      r?.removeClass?.("region-blue");
+      r?.addClass?.(className) ?? r?.element?.classList?.add(className);
+    },
+    [wavesurfer, annotations, menuState.selectedUid]
+  );
+
+  const handleMenuDelete = useCallback(() => {
+    if (!wavesurfer) return;
+    const regions = wavesurfer?.plugins?.regions;
+    const row = annotations.find((a) => a.uid === menuState.selectedUid);
+    if (!regions || !row) return;
+    regions.getRegion?.(row.regionId)?.remove();
+  }, [wavesurfer, annotations, menuState.selectedUid]);
 
   return (
     <AppRoot>
@@ -424,41 +572,12 @@ export default function AppLayout() {
       <ContentWrapper>
         {/* LeftControls */}
         <LeftControls>
-          <SectionLabel>SELECT / EDIT</SectionLabel>
-          <CtrlSection>
-            <CtrlColumn>
-              <IconBtn title="Box Select"><img src="/img/box_select1.png" alt="select" /></IconBtn>
-              <IconBtn title="Text Box"><img src="/img/text-box1.png" alt="text" /></IconBtn>
-              <IconBtn title="Draw"><img src="/img/draw1.png" alt="draw" /></IconBtn>
-              <IconBtn title="Info"><img src="/img/info1.png" alt="info" /></IconBtn>
-            </CtrlColumn>
-          </CtrlSection>
-          <SectionLabel>INFO / VIEW</SectionLabel>
-          <CtrlSection>
-            <CtrlColumn>
-              <IconBtn title="Info"><img src="/img/info1.png" alt="info" /></IconBtn>
-              <IconBtn title="View"><img src="/img/view1.png" alt="view" /></IconBtn>
-            </CtrlColumn>
-          </CtrlSection>
-          <Divider />
-          <SectionLabel>UTILITIES</SectionLabel>
-          <CtrlSection>
-            <CtrlColumn>
-              <IconBtn title="Upload"><img src="/img/scroll1.png" alt="upload" /></IconBtn>
-              <IconBtn title="Screenshot"><img src="/img/print1.png" alt="screenshot" /></IconBtn>
-              <IconBtn title="Time"><img src="/img/clock_plus1.png" alt="time" /></IconBtn>
-            </CtrlColumn>
-          </CtrlSection>
-          <Divider />
-          <SectionLabel>AUDIO / AI</SectionLabel>
-          <CtrlSection>
-            <CtrlColumn>
-              <IconBtn title="Mute"><img src="/img/mute1.png" alt="mute" /></IconBtn>
-              <IconBtn title="Speedometer"><img src="/img/speedometer1.png" alt="speed" /></IconBtn>
-              <IconBtn title="+10s"><img src="/img/forward1.png" alt="forward" /></IconBtn>
-              <IconBtn title="AI"><img src="/img/ai1.png" alt="ai" /></IconBtn>
-            </CtrlColumn>
-          </CtrlSection>
+          <SidebarControls
+            selectionEnabled={selectionEnabled}
+            onToggleSelection={handleToggleSelection}
+            onDeleteSelected={handleDeleteSelected}
+            onColorSelected={handleColorSelected}
+          />
         </LeftControls>
 
         {/* Sidebar de tags */}
@@ -492,14 +611,30 @@ export default function AppLayout() {
         <MainArea>
           <Viewer>
             <ViewerHeader>
-              <Badge>Spectrogram / Waveform</Badge>
+              <Badge>Waveform</Badge>
             </ViewerHeader>
+
             <ViewerBox>
               <SpectrogramOnClick
                 audioUrl={audioUrl}
-                onReady={handleReady}
-                onClickTimeFreq={handleClickTF}
+                onReady={setWavesurfer}
+                selectionEnabled={selectionEnabled}
+                onRegionChange={handleRegionChange}
               />
+
+              {/* Mini menu da region selecionada (opcional) */}
+              <RegionMenu
+                visible={menuState.visible}
+                left={menuState.left}
+                top={menuState.top}
+                annotation={
+                  annotations.find((a) => a.uid === menuState.selectedUid) || null
+                }
+                onSetClass={handleSetClass}
+                onColor={handleMenuColor}
+                onDelete={handleMenuDelete}
+              />
+
               <Playback>
                 <PlaybackControls
                   wavesurfer={wavesurfer}
@@ -509,7 +644,7 @@ export default function AppLayout() {
               </Playback>
             </ViewerBox>
           </Viewer>
-          
+
           {/* bottom panels */}
           <Bottom>
             <BottomGrid>
@@ -522,23 +657,30 @@ export default function AppLayout() {
                   <Table>
                     <thead>
                       <tr>
-                        <Th>ID</Th><Th>Begin (s)</Th><Th>End (s)</Th>
-                        <Th>High Freq (Hz)</Th><Th>Low Freq (Hz)</Th><Th>Class</Th>
+                        <Th>ID</Th>
+                        <Th>Begin (s)</Th>
+                        <Th>End (s)</Th>
+                        <Th>High Freq (Hz)</Th>
+                        <Th>Low Freq (Hz)</Th>
+                        <Th>Class</Th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr>
-                        <Td>1</Td><Td>5.0434</Td><Td>6.6921</Td>
-                        <Td>7252</Td><Td>2286</Td><Td>dolphin</Td>
-                      </tr>
-                      <tr>
-                        <Td>2</Td><Td>5.0434</Td><Td>6.6921</Td>
-                        <Td>7252</Td><Td>2286</Td><Td>whale</Td>
-                      </tr>
+                      {annotations.map((a) => (
+                        <tr key={a.uid}>
+                          <Td>{a.uid}</Td>
+                          <Td>{a.start.toFixed(4)}</Td>
+                          <Td>{a.end.toFixed(4)}</Td>
+                          <Td>{Math.round(a.highHz)}</Td>
+                          <Td>{Math.round(a.lowHz)}</Td>
+                          <Td>{a.className || "-"}</Td>
+                        </tr>
+                      ))}
                     </tbody>
                   </Table>
                 </TableWrapper>
               </Annotations>
+
               <FilesPanel>
                 <PanelHeader>
                   <PanelTitle>Files</PanelTitle>

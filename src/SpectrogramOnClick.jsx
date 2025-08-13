@@ -1,9 +1,10 @@
 // SpectrogramOnClick.jsx
-import React, { useEffect, useRef } from 'react';
-import PropTypes from 'prop-types';
-import WaveSurfer from 'wavesurfer.js';
-import SpectrogramPlugin from 'wavesurfer.js/dist/plugins/spectrogram.esm.js';
-import styled from 'styled-components';
+import React, { useEffect, useRef } from "react";
+import PropTypes from "prop-types";
+import styled, { createGlobalStyle } from "styled-components";
+import WaveSurfer from "wavesurfer.js";
+import RegionsPlugin from "wavesurfer.js/dist/plugins/regions.esm.js";
+import { measureRegionFreqs } from "./fftMeasure";
 
 const Container = styled.div`
   position: relative;
@@ -14,210 +15,173 @@ const Container = styled.div`
 
 const WaveformWrapper = styled.div`
   width: 100%;
-  height: 100px;
+  height: 260px;
+  background: #0f111a;
+  border-radius: 12px;
 `;
 
-const SpectrogramWrapper = styled.div`
-  position: relative;          /* chave: vira âncora do overlay */
-  width: 100%;
-  height: 128px;
-  margin-top: 12px;
+const GlobalRegionStyles = createGlobalStyle`
+  .wave-region { border-radius: 6px; box-shadow: inset 0 0 0 2px rgba(0,0,0,.25); backdrop-filter: saturate(105%); }
+  .region-green { background: rgba(102,255,102,.35) !important; border: 2px solid rgba(102,255,102,.9) !important; }
+  .region-blue  { background: rgba(15,131,155,.55) !important; border: 2px solid rgba(15,131,155,.95) !important; }
+  .region-selected { box-shadow: 0 0 0 2px #79ffe1, inset 0 0 0 2px rgba(0,0,0,.25) !important; }
+  .wavesurfer-handle { width: 3px !important; background: rgba(255,255,255,0.7) !important; }
 `;
 
-const OverlayCanvas = styled.canvas`
-  position: absolute;
-  inset: 0;
-  z-index: 3;                  /* fica por cima do heatmap */
-  pointer-events: auto;        /* recebe cliques */
-`;
+export default function SpectrogramOnClick({
+  audioUrl,
+  onReady,
+  selectionEnabled,
+  onRegionChange,
+}) {
+  const waveformRef = useRef(null);
+  const wsRef = useRef(null);
+  const regionsRef = useRef(null);
+  const selectedIdRef = useRef(null);
+  const regionMapRef = useRef(new Map());
+  const bufferRef = useRef(null);
 
-const SpectrogramOnClick = ({ audioUrl, onReady, onClickTimeFreq }) => {
-  const waveformRef    = useRef(null);
-  const spectrogramRef = useRef(null);      // container onde o plugin desenha
-  const overlayRef     = useRef(null);      // nosso canvas por cima
-  const wsRef          = useRef(null);
-  const specPluginRef  = useRef(null);
+  // >>> mantém o callback estável (evita recriar WaveSurfer)
+  const onRegionChangeRef = useRef(onRegionChange);
+  useEffect(() => { onRegionChangeRef.current = onRegionChange; }, [onRegionChange]);
 
-  // guardas pra conversão y -> Hz
-  const fminRef = useRef(0);
-  const fmaxRef = useRef(22050);
+  // helpers
+  const addClass = (r, cls) => { r?.addClass?.(cls) ?? r?.element?.classList?.add(cls); };
+  const removeClass = (r, cls) => { r?.removeClass?.(cls) ?? r?.element?.classList?.remove(cls); };
+  const getRegion = (id) => regionMapRef.current.get(id);
+  const selectRegion = (id) => {
+    const prevId = selectedIdRef.current;
+    if (prevId && prevId !== id) removeClass(getRegion(prevId), "region-selected");
+    selectedIdRef.current = id;
+    addClass(getRegion(id), "region-selected");
+  };
+  const serializeRegion = (r, metrics) => ({
+    id: r.id,
+    start: r.start,
+    end: r.end,
+    data: { ...(r.data || {}), ...(metrics ? { metrics } : {}) },
+    className: r.element?.className || "",
+  });
+  const emit = (payload) => onRegionChangeRef.current?.(payload);
 
+  // cria WaveSurfer + regions
   useEffect(() => {
-    // 1) cria WaveSurfer
     const ws = WaveSurfer.create({
-      container:     waveformRef.current,
-      waveColor:     '#888',
-      progressColor: '#5c6bc0',
-      cursorColor:   '#fff',
-      scrollParent:  true,
-      backend:       'WebAudio',
-      height:        100,
-      responsive:    true,
-    });
-    wsRef.current = ws;
-
-    // 2) cria plugin de espectrograma e registra
-    const spec = SpectrogramPlugin.create({
-      container:     spectrogramRef.current,
-      labels:        true,
-      height:        128,
-      splitChannels: false,
-      fftSamples:    1024,
-      scale:         'linear',            // <— linear pra conversão direta
-      // frequencyMax será ajustado quando o áudio estiver pronto
-    });
-    ws.registerPlugin(spec);
-    specPluginRef.current = spec;
-
-    // 3) expõe a instância pro pai
-    if (typeof onReady === 'function') onReady(ws);
-
-    // 4) quando pronto, ajusta faixa de frequências (0 .. nyquist)
-    ws.on('ready', () => {
-      const sr = ws.backend?.buffer?.sampleRate || 44100;
-      fminRef.current = 0;
-      fmaxRef.current = sr / 2;
-
-      // alguns builds do plugin suportam setOptions; se não suportar, ignore.
-      try {
-        spec.setOptions?.({ frequencyMin: 0, frequencyMax: fmaxRef.current, scale: 'linear' });
-      } catch (_) {}
-
-      // sincroniza overlay com o canvas do espectrograma
-      syncOverlaySize();
+      container: waveformRef.current,
+      height: 260,
+      waveColor: "#b7bec7",
+      progressColor: "#15839b",
+      cursorWidth: 0,
+      normalize: true,
+      minPxPerSec: 80,
+      fillParent: true,
+      partialRender: true,
+      dragToSeek: true,
+      backend: "WebAudio",
+      responsive: true,
     });
 
-    // 5) carregar áudio
+    const regions = RegionsPlugin.create({ dragSelection: false });
+    ws.registerPlugin(regions);
+
+    ws.on("ready", () => {
+      bufferRef.current = ws.getDecodedData();
+      onReady?.(ws);
+    });
+
+    const computeAndEmit = (type, r) => {
+      const buf = bufferRef.current;
+      let metrics = { lowHz: 0, highHz: 0, peakHz: 0, centroidHz: 0, frames: 0 };
+      if (buf && (r.end - r.start) > 0) {
+        try {
+          metrics = measureRegionFreqs(buf, r.start, r.end, { fftSize: 2048, floorDb: -25 });
+        } catch (e) {
+          console.warn("measureRegionFreqs error:", e);
+        }
+      }
+
+      const waveRect = waveformRef.current?.getBoundingClientRect();
+      const elRect = r.element?.getBoundingClientRect();
+      const left = waveRect && elRect ? Math.max(8, Math.min(elRect.left - waveRect.left, waveRect.width - 220)) : 12;
+      const top = 8;
+
+      emit({ type, region: serializeRegion(r, metrics), menuPos: { left, top } });
+    };
+
+    regions.on("region-clicked", (r, e) => {
+      e.stopPropagation?.();
+      selectRegion(r.id);
+      computeAndEmit("selected", r);
+    });
+
+    regions.on("region-created", (r) => {
+      regionMapRef.current.set(r.id, r);
+      addClass(r, "region-green");
+      computeAndEmit("created", r);
+    });
+
+    regions.on("region-updated", (r) => {
+      regionMapRef.current.set(r.id, r);
+      computeAndEmit("updated", r);
+    });
+
+    regions.on("region-removed", (r) => {
+      regionMapRef.current.delete(r.id);
+      if (selectedIdRef.current === r.id) selectedIdRef.current = null;
+      computeAndEmit("removed", r);
+    });
+
     ws.load(audioUrl);
 
-    // 6) ResizeObserver mantém overlay = mesmo tamanho do canvas do plugin
-    const ro = new ResizeObserver(() => syncOverlaySize());
-    // observar o container (o canvas do plugin é filho)
-    if (spectrogramRef.current) ro.observe(spectrogramRef.current);
+    wsRef.current = ws;
+    regionsRef.current = regions;
 
-    // 7) clique no overlay
-    const overlay = overlayRef.current;
-    const handleClick = (e) => {
-      const ws  = wsRef.current;
-      if (!ws || !overlay) return;
-
-      const rect = overlay.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-
-      // tempo (largura do overlay corresponde à duração)
-      const duration = ws.getDuration() || 0;
-      const time = (x / rect.width) * duration;
-
-      // frequência (escala linear definida no plugin)
-      const fmin = fminRef.current;
-      const fmax = fmaxRef.current;
-      const freq = fmin + (1 - y / rect.height) * (fmax - fmin);
-
-      // desenha uma marquinha/label no overlay
-      drawMarker(x, y, `${(freq / 1000).toFixed(2)} kHz`);
-
-      if (typeof onClickTimeFreq === 'function') {
-        onClickTimeFreq({ time, freq, magnitude: null });
-      } else {
-        console.log(`Tempo: ${time.toFixed(2)}s, Freq: ${freq.toFixed(0)}Hz, Mag: null`);
-      }
-    };
-    overlay?.addEventListener('click', handleClick);
-
-    // cleanup
     return () => {
-      overlay?.removeEventListener('click', handleClick);
-      ro.disconnect();
-      try {
-        ws.destroy();
-      } catch (err) {
-        if (err?.name !== 'AbortError') console.error(err);
+      try { ws.destroy(); } catch (err) {
+        if (err?.name !== "AbortError") console.error(err);
       }
+      wsRef.current = null;
+      regionsRef.current = null;
+      regionMapRef.current.clear();
     };
-  }, [audioUrl, onReady, onClickTimeFreq]);
+  // 👇 só recria quando muda o ficheiro ou o onReady (que é estável)
+  }, [audioUrl, onReady]);
 
-  // — helpers —
+  // toggle dragSelection (compat v6/v7)
+  useEffect(() => {
+    const regions = regionsRef.current;
+    if (!regions) return;
+    const enable = !!selectionEnabled;
 
-  // deixa o overlay exatamente no mesmo tamanho “real” do canvas do plugin
-  const syncOverlaySize = () => {
-    const overlay = overlayRef.current;
-    const container = spectrogramRef.current;
-    if (!overlay || !container) return;
-
-    // o plugin usa CSS para dimensionar; igualamos o nosso
-    const { width, height } = container.getBoundingClientRect();
-    overlay.style.width  = `${width}px`;
-    overlay.style.height = `${height}px`;
-
-    // e ajustamos o buffer interno pra densidade de pixels (nítido)
-    const dpr = window.devicePixelRatio || 1;
-    overlay.width  = Math.max(1, Math.floor(width  * dpr));
-    overlay.height = Math.max(1, Math.floor(height * dpr));
-
-    const ctx = overlay.getContext('2d');
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // escala o sistema de coords
-    clearOverlay();
-  };
-
-  const clearOverlay = () => {
-    const overlay = overlayRef.current;
-    if (!overlay) return;
-    const ctx = overlay.getContext('2d');
-    const { width, height } = overlay.getBoundingClientRect();
-    ctx.clearRect(0, 0, width, height);
-  };
-
-  const drawMarker = (x, y, label) => {
-    const overlay = overlayRef.current;
-    if (!overlay) return;
-    const ctx = overlay.getContext('2d');
-    const { width, height } = overlay.getBoundingClientRect();
-
-    clearOverlay();
-
-    // linha horizontal
-    ctx.strokeStyle = 'rgba(255,255,0,0.9)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(width, y);
-    ctx.stroke();
-
-    // *tooltip* simples
-    const pad = 6;
-    ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto';
-    const tm = ctx.measureText(label);
-    const tw = tm.width + pad * 2;
-    const th = 18;
-
-    let tx = Math.min(Math.max(4, x + 8), width - tw - 4);
-    let ty = Math.max(th + 4, y - 8);
-
-    ctx.fillStyle = 'rgba(0,0,0,0.75)';
-    ctx.fillRect(tx, ty - th, tw, th);
-    ctx.fillStyle = '#fff';
-    ctx.fillText(label, tx + pad, ty - 5);
-  };
+    if (typeof regions.enableDragSelection === "function") {
+      if (enable) regions.enableDragSelection({ slop: 1 });
+      else if (typeof regions.disableDragSelection === "function") regions.disableDragSelection();
+      else if (typeof regions.setOptions === "function") regions.setOptions({ dragSelection: false });
+      else regions.dragSelection = false;
+    } else if (typeof regions.setOptions === "function") {
+      regions.setOptions({ dragSelection: enable ? { slop: 1 } : false });
+    } else {
+      regions.dragSelection = enable;
+    }
+  }, [selectionEnabled]);
 
   return (
     <Container>
+      <GlobalRegionStyles />
       <WaveformWrapper ref={waveformRef} />
-      <SpectrogramWrapper ref={spectrogramRef}>
-        <OverlayCanvas ref={overlayRef} />
-      </SpectrogramWrapper>
     </Container>
   );
-};
+}
 
 SpectrogramOnClick.propTypes = {
-  audioUrl:        PropTypes.string.isRequired,
-  onReady:         PropTypes.func,
-  onClickTimeFreq: PropTypes.func,
-};
-SpectrogramOnClick.defaultProps = {
-  onReady:         null,
-  onClickTimeFreq: null,
+  audioUrl: PropTypes.string.isRequired,
+  onReady: PropTypes.func,
+  selectionEnabled: PropTypes.bool,
+  onRegionChange: PropTypes.func,
 };
 
-export default SpectrogramOnClick;
+SpectrogramOnClick.defaultProps = {
+  onReady: null,
+  selectionEnabled: false,
+  onRegionChange: null,
+};
