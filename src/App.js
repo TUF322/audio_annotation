@@ -1,13 +1,12 @@
+// src/App.js
 import React, { useState, useCallback, useRef } from "react";
 import styled from "styled-components";
 import SpectrogramOnClick from "./SpectrogramOnClick";
 import PlaybackControls from "./PlaybackControls";
 import SidebarControls from "./SidebarControls";
-import RegionMenu from "./RegionMenu"; 
+import RegionMenu from "./RegionMenu";
 
-
-
-
+/* ================= theme ================= */
 const theme = {
   bg: "#0f111a",
   card: "#1f2430",
@@ -18,8 +17,7 @@ const theme = {
   primary: "#5c6bc0",
 };
 
-
-// Layout root
+/* ================= styled ================= */
 export const AppRoot = styled.div`
   display: flex;
   flex-direction: column;
@@ -28,7 +26,6 @@ export const AppRoot = styled.div`
   color: ${theme.text};
   font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 `;
-
 export const Topbar = styled.header`
   display: flex;
   justify-content: space-between;
@@ -38,22 +35,9 @@ export const Topbar = styled.header`
   background: linear-gradient(90deg, ${theme.border}, ${theme.card});
   flex-shrink: 0;
 `;
-
-export const Title = styled.div`
-  font-size: 1.1rem;
-  font-weight: 600;
-`;
-
-export const Actions = styled.div`
-  display: flex;
-  align-items: center;
-`;
-
-export const Subtitle = styled.div`
-  font-size: 0.8rem;
-  margin-right: 8px;
-`;
-
+export const Title = styled.div`font-size: 1.1rem; font-weight: 600;`;
+export const Actions = styled.div`display: flex; align-items: center;`;
+export const Subtitle = styled.div`font-size: 0.8rem; margin-right: 8px;`;
 export const Btn = styled.button`
   background: ${theme.primary};
   border: none;
@@ -64,14 +48,7 @@ export const Btn = styled.button`
   color: #fff;
   white-space: nowrap;
 `;
-
-export const ContentWrapper = styled.div`
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-`;
-
-// Side controls
+export const ContentWrapper = styled.div`flex: 1; display: flex; overflow: hidden;`;
 export const LeftControls = styled.nav`
   width: 100px;
   background: ${theme.controlBg};
@@ -82,338 +59,130 @@ export const LeftControls = styled.nav`
   border-right: 1px solid ${theme.border};
   overflow: auto;
 `;
-
-export const CtrlSection = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-`;
-
+export const CtrlSection = styled.div`display: flex; flex-direction: column; gap: 6px;`;
 export const SectionLabel = styled.div`
-  font-size: 0.55rem;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: ${theme.muted};
+  font-size: 0.55rem; text-transform: uppercase; letter-spacing: 1px; color: ${theme.muted};
 `;
-
-export const CtrlColumn = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-`;
-
+export const CtrlColumn = styled.div`display: flex; flex-direction: column; gap: 8px;`;
 export const IconBtn = styled.button`
-  background: #22263f;
-  border: none;
-  padding: 6px;
-  border-radius: 6px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
+  background: #22263f; border: none; padding: 6px; border-radius: 6px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; width: 30px; height: 30px;
   &:hover { background: #2f345f; }
   img { max-width: 22px; max-height: 22px; }
 `;
-
-export const Divider = styled.div`
-  height: 1px;
-  background: ${theme.border};
-  margin: 8px 0;
-`;
-
-// Sidebar panels
+export const Divider = styled.div`height: 1px; background: ${theme.border}; margin: 8px 0;`;
 export const TagSidebar = styled.aside`
-  width: 220px;
-  background: ${theme.card};
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  border-right: 1px solid ${theme.border};
-  overflow: auto;
+  width: 220px; background: ${theme.card}; padding: 16px;
+  display: flex; flex-direction: column; gap: 16px;
+  border-right: 1px solid ${theme.border}; overflow: auto;
 `;
-
-export const Panel = styled.div`
-  background: ${theme.card};
-  border-radius: 10px;
-  padding: 10px;
-`;
-
-export const PanelTitle = styled.div`
-  font-weight: 600;
-  font-size: 0.9rem;
-  margin-bottom: 4px;
-`;
-
-export const ItemList = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-`;
-
+export const Panel = styled.div`background: ${theme.card}; border-radius: 10px; padding: 10px;`;
+export const PanelTitle = styled.div`font-weight: 600; font-size: 0.9rem; margin-bottom: 4px;`;
+export const ItemList = styled.div`display: flex; flex-direction: column; gap: 4px;`;
 export const Item = styled.div`
-  background: rgba(255,255,255,0.05);
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: 0.75rem;
+  background: rgba(255,255,255,0.05); padding: 6px 10px; border-radius: 6px; font-size: 0.75rem;
 `;
-
-export const TagItem = styled(Item)`
-  border: 1px solid ${theme.primary};
-`;
-
-// Main area
-export const MainArea = styled.main`
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-`;
-
-export const Viewer = styled.section`
-  padding: 16px;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-`;
-
-export const ViewerHeader = styled.div`
-  display: flex;
-  align-items: center;
-`;
-
+export const TagItem = styled(Item)`border: 1px solid ${theme.primary};`;
+export const MainArea = styled.main`flex: 1; display: flex; flex-direction: column; overflow: hidden;`;
+export const Viewer = styled.section`padding: 16px; flex: 1; display: flex; flex-direction: column; gap: 12px;`;
+export const ViewerHeader = styled.div`display: flex; align-items: center;`;
 export const Badge = styled.div`
-  background: rgba(255,255,255,0.07);
-  padding: 6px 12px;
-  border-radius: 8px;
-  font-size: 0.65rem;
+  background: rgba(255,255,255,0.07); padding: 6px 12px; border-radius: 8px; font-size: 0.65rem;
 `;
-
 export const ViewerBox = styled.div`
-  flex: 1;
-  background: ${theme.card};
-  border-radius: 14px;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  box-shadow: inset 0 0 14px rgba(0,0,0,0.5);
+  flex: 1; background: ${theme.card}; border-radius: 14px; padding: 16px;
+  display: flex; flex-direction: column; gap: 12px; box-shadow: inset 0 0 14px rgba(0,0,0,0.5);
 `;
-
 export const Placeholder = styled.div`
-  position: relative;
-  flex: 1;
-  background: #1b1f31;
-  border-radius: 10px;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: relative; flex: 1; background: #1b1f31; border-radius: 10px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
 `;
-
 export const PlaceholderImg = styled.img`
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  opacity: 0.9;
+  max-width: 100%; max-height: 100%; object-fit: contain; opacity: 0.9;
 `;
-
 export const OverlayLabel = styled.div`
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  background: rgba(0,0,0,0.6);
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 0.75rem;
+  position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.6);
+  padding: 6px 12px; border-radius: 6px; font-size: 0.75rem;
 `;
-
 export const Playback = styled.div`
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 14px;
-  padding-top: 8px;
-  border-top: 1px solid ${theme.border};
-  flex-wrap: wrap;
+  display: flex; justify-content: center; align-items: center; gap: 14px;
+  padding-top: 8px; border-top: 1px solid ${theme.border}; flex-wrap: wrap;
 `;
-
-export const ControlsRow = styled.div`
-  display: flex;
-  gap: 8px;
-`;
-
-export const ControlBtn = styled(IconBtn)`
-  background: ${theme.controlBg};
-`;
-
-export const ProgressWrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 100%;
-`;
-
+export const ControlsRow = styled.div`display: flex; gap: 8px;`;
+export const ControlBtn = styled(IconBtn)`background: ${theme.controlBg};`;
+export const ProgressWrapper = styled.div`display: flex; flex-direction: column; gap: 6px; width: 100%;`;
 export const ProgressBar = styled.div`
-  width: 100%;
-  height: 6px;
-  background: #e0e0e0;
-  border-radius: 3px;
-  position: relative;
-  overflow: hidden;
+  width: 100%; height: 6px; background: #e0e0e0; border-radius: 3px;
+  position: relative; overflow: hidden;
 `;
-
 export const ProgressFilled = styled.div`
-  position: absolute;
-  height: 100%;
-  width: 40%;
-  background: #2196f3;
-  border-radius: 3px;
+  position: absolute; height: 100%; width: 40%; background: #2196f3; border-radius: 3px;
 `;
-
-export const ScrollBarContainer = styled.div`
-  width: 100%;
-  height: 8px;
-`;
-
+export const ScrollBarContainer = styled.div`width: 100%; height: 8px;`;
 export const ScrollBar = styled.div`
-  width: 100%;
-  height: 10px;
-  background: #e0e0e0;
-  border-radius: 2px;
-  position: relative;
+  width: 100%; height: 10px; background: #e0e0e0; border-radius: 2px; position: relative;
 `;
-
 export const ScrollThumb = styled.div`
-  position: absolute;
-  height: 100%;
-  width: 10%;
-  left: 0;
-  background: #4b0556ff;
-  border-radius: 2px;
+  position: absolute; height: 100%; width: 10%; left: 0; background: #4b0556ff; border-radius: 2px;
 `;
-
-export const Time = styled.div`
-  font-size: 0.75rem;
-  color: #666;
-  text-align: center;
-`;
-
-// Bottom panels
-export const Bottom = styled.section`
-  padding: 16px;
-  background: transparent;
-  flex-shrink: 0;
-`;
-
-export const BottomGrid = styled.div`
-  display: flex;
-  gap: 16px;
-`;
-
+export const Time = styled.div`font-size: 0.75rem; color: #666; text-align: center;`;
+export const Bottom = styled.section`padding: 16px; background: transparent; flex-shrink: 0;`;
+export const BottomGrid = styled.div`display: flex; gap: 16px;`;
 export const Annotations = styled.div`
-  flex: 2;
-  background: #0f1228;
-  border-radius: 10px;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  overflow: auto;
+  flex: 2; background: #0f1228; border-radius: 10px; padding: 14px;
+  display: flex; flex-direction: column; gap: 10px; overflow: auto;
 `;
-
 export const FilesPanel = styled.div`
-  flex: 1;
-  background: #0f1228;
-  border-radius: 10px;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  overflow: auto;
+  flex: 1; background: #0f1228; border-radius: 10px; padding: 14px;
+  display: flex; flex-direction: column; gap: 10px; overflow: auto;
 `;
-
-export const PanelHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-`;
-
-export const PanelMeta = styled.div`
-  font-size: 0.65rem;
-  color: ${theme.muted};
-`;
-
-export const TableWrapper = styled.div`
-  overflow: auto;
-  max-height: 160px;
-`;
-
-export const Table = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.7rem;
-`;
-
+export const PanelHeader = styled.div`display: flex; justify-content: space-between; align-items: center;`;
+export const PanelMeta = styled.div`font-size: 0.65rem; color: ${theme.muted};`;
+export const TableWrapper = styled.div`overflow: auto; max-height: 160px;`;
+export const Table = styled.table`width: 100%; border-collapse: collapse; font-size: 0.7rem;`;
 export const Th = styled.th`
-  padding: 8px 10px;
-  text-align: left;
-  border-bottom: 1px solid ${theme.border};
+  padding: 8px 10px; text-align: left; border-bottom: 1px solid ${theme.border};
   background: rgba(255,255,255,0.03);
 `;
-
-export const Td = styled.td`
-  padding: 8px 10px;
-  border-bottom: 1px solid ${theme.border};
-`;
-
-export const FileList = styled.ul`
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  flex: 1;
-  overflow: auto;
-`;
-
+export const Td = styled.td`padding: 8px 10px; border-bottom: 1px solid ${theme.border};`;
+export const FileList = styled.ul`list-style: none; padding: 0; margin: 0; flex: 1; overflow: auto;`;
 export const FileItem = styled.li`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #1d2142;
-  padding: 10px;
-  border-radius: 8px;
-  margin-bottom: 8px;
-  font-size: 0.8rem;
+  display: flex; justify-content: space-between; align-items: center;
+  background: #1d2142; padding: 10px; border-radius: 8px; margin-bottom: 8px; font-size: 0.8rem;
 `;
-
 export const FileName = styled.div``;
-export const FileActions = styled.div`
-  display: flex;
-  gap: 6px;
-`;
-
+export const FileActions = styled.div`display: flex; gap: 6px;`;
 export const SmallBtn = styled(IconBtn)``;
-export const BtnFull = styled(Btn)`
-  width: 100%;
+export const BtnFull = styled(Btn)`width: 100%;`;
+export const LinkBtn = styled.button`
+  background: transparent; border: none; color: ${theme.primary}; cursor: pointer;
+  padding: 0; font-size: 0.75rem; text-decoration: underline;
 `;
 
-export default function AppLayout() {
-  const [audioUrl] = useState("/audio/10hz.mp3");
+/* ============== constants ============== */
+const REGION_COLOR_CLASSES = [
+  "region-green",
+  "region-blue",
+  "region-red",
+  "region-yellow",
+  "region-purple",
+  "region-orange",
+  "region-cyan",
+  "region-pink",
+];
+
+/* ============== component ============== */
+function AppLayout() {
+  const [audioUrl] = useState("/audio/whale.mp3");
   const [wavesurfer, setWavesurfer] = useState(null);
 
-  // toggle seleção (Sidebar)
   const [selectionEnabled, setSelectionEnabled] = useState(false);
   const selectedRegionIdRef = useRef(null);
 
-  // IDs e tabela
-  const idMapRef = useRef(new Map()); // region.id (string) -> uid (num)
+  const idMapRef = useRef(new Map()); // region.id -> uid
   const [nextUid, setNextUid] = useState(1);
   const [annotations, setAnnotations] = useState([]);
 
-  // mini menu da region (se usares RegionMenu.jsx)
   const [menuState, setMenuState] = useState({
     visible: false,
     left: 12,
@@ -421,36 +190,51 @@ export default function AppLayout() {
     selectedUid: null,
   });
 
+  const viewerBoxRef = useRef(null);
+
   const handleToggleSelection = useCallback(() => {
     setSelectionEnabled((v) => !v);
   }, []);
 
-  const handleReady = useCallback((ws) => {
-    setWavesurfer(ws);
-  }, []);
+  const handleReady = useCallback((ws) => setWavesurfer(ws), []);
 
-  // receber eventos do viewer (created/updated/selected/removed)
+  // encontra o plugin de regions
+  const getRegionsPlugin = useCallback(() => {
+    const ws = wavesurfer;
+    if (!ws || !ws.plugins) return null;
+    if (ws.plugins.regions) return ws.plugins.regions;
+    for (const key of Object.keys(ws.plugins)) {
+      const inst = ws.plugins[key];
+      if (
+        inst &&
+        (typeof inst.getRegion === "function" ||
+          typeof inst.addRegion === "function" ||
+          typeof inst.enableDragSelection === "function")
+      ) {
+        return inst;
+      }
+    }
+    return null;
+  }, [wavesurfer]);
+
+  // eventos das regions
   const handleRegionChange = useCallback(
     (evt) => {
-      const { type, region, menuPos } = evt;
+      const { type, region } = evt;
       const rid = region.id;
 
-      // manter seleção por id interno do plugin
-      if (type === "selected") {
-        selectedRegionIdRef.current = rid;
-      }
+      if (type === "selected") selectedRegionIdRef.current = rid;
       if (type === "removed" && selectedRegionIdRef.current === rid) {
         selectedRegionIdRef.current = null;
       }
 
-      // atribuir UID estável
+      // garantir UID estável por region.id
       if (!idMapRef.current.has(rid)) {
         idMapRef.current.set(rid, nextUid);
         setNextUid((n) => n + 1);
       }
       const uid = idMapRef.current.get(rid);
 
-      // métricas (medidas reais, se vieram do viewer)
       const lowHz = region?.data?.metrics?.lowHz ?? 0;
       const highHz = region?.data?.metrics?.highHz ?? 0;
 
@@ -463,7 +247,7 @@ export default function AppLayout() {
           end: region.end,
           lowHz,
           highHz,
-          className: idx >= 0 ? prev[idx].className : "", // mantém classe se existir
+          className: idx >= 0 ? prev[idx].className : "",
         };
 
         if (type === "removed") {
@@ -472,7 +256,6 @@ export default function AppLayout() {
           clone.splice(idx, 1);
           return clone;
         }
-
         if (idx === -1) return [...prev, base];
         const clone = prev.slice();
         clone[idx] = { ...clone[idx], ...base };
@@ -480,48 +263,82 @@ export default function AppLayout() {
       });
 
       if (type === "selected") {
-        setMenuState({
-          visible: true,
-          left: menuPos?.left ?? 12,
-          top: menuPos?.top ?? 8,
-          selectedUid: uid,
-        });
+        const regions = getRegionsPlugin();
+        const r = regions?.getRegion?.(rid);
+        const boxRect = viewerBoxRef.current?.getBoundingClientRect();
+        const elRect = r?.element?.getBoundingClientRect();
+        const left =
+          boxRect && elRect
+            ? Math.max(8, Math.min(elRect.left - boxRect.left, boxRect.width - 240))
+            : 16;
+        const top =
+          boxRect && elRect ? Math.max(8, elRect.top - boxRect.top - 56) : 12;
+        setMenuState({ visible: true, left, top, selectedUid: uid });
       }
+
       if (type === "removed") {
         setMenuState((m) =>
           m.selectedUid === uid ? { ...m, visible: false } : m
         );
       }
     },
-    [nextUid]
+    [nextUid, getRegionsPlugin]
   );
 
-  // Sidebar: apagar region selecionada
+  // ações da sidebar
   const handleDeleteSelected = useCallback(() => {
-    if (!wavesurfer) return;
-    const regions = wavesurfer?.plugins?.regions;
+    const regions = getRegionsPlugin();
     const id = selectedRegionIdRef.current;
-    if (!regions || !id) return;
-    regions.getRegion?.(id)?.remove();
-  }, [wavesurfer]);
+    regions?.getRegion?.(id)?.remove();
+  }, [getRegionsPlugin]);
 
-  // Sidebar: colorir region selecionada (classe CSS)
   const handleColorSelected = useCallback(
     (className) => {
-      if (!wavesurfer) return;
-      const regions = wavesurfer?.plugins?.regions;
+      const regions = getRegionsPlugin();
       const id = selectedRegionIdRef.current;
-      if (!regions || !id) return;
-      const r = regions.getRegion?.(id);
+      const r = regions?.getRegion?.(id);
       if (!r) return;
-      r.removeClass?.("region-green");
-      r.removeClass?.("region-blue");
-      r.addClass?.(className) ?? r.element?.classList?.add(className);
+      REGION_COLOR_CLASSES.forEach((c) =>
+        r.removeClass?.(c) ?? r.element?.classList?.remove(c)
+      );
+      if (className)
+        r.addClass?.(className) ?? r.element?.classList?.add(className);
     },
-    [wavesurfer]
+    [getRegionsPlugin]
   );
 
-  // RegionMenu: setar classe na linha + aplicar cor visual
+  // abrir popup a partir da tabela
+  const handleOpenMenuForUid = useCallback(
+    (uid) => {
+      const row = annotations.find((a) => a.uid === uid);
+      if (!row) return;
+      const regions = getRegionsPlugin();
+      const r = regions?.getRegion?.(row.regionId);
+
+      if (r) {
+        r.addClass?.("region-selected") ??
+          r.element?.classList?.add("region-selected");
+        selectedRegionIdRef.current = row.regionId;
+      }
+
+      const dur = wavesurfer?.getDuration?.() || 0;
+      if (dur > 0) wavesurfer.seekTo(Math.min(0.999, row.start / dur));
+
+      const boxRect = viewerBoxRef.current?.getBoundingClientRect();
+      const elRect = r?.element?.getBoundingClientRect();
+      const left =
+        boxRect && elRect
+          ? Math.max(8, Math.min(elRect.left - boxRect.left, boxRect.width - 240))
+          : 16;
+      const top =
+        boxRect && elRect ? Math.max(8, elRect.top - boxRect.top - 56) : 12;
+
+      setMenuState({ visible: true, left, top, selectedUid: uid });
+    },
+    [annotations, wavesurfer, getRegionsPlugin]
+  );
+
+  // callbacks do popup
   const handleSetClass = useCallback(
     (value) => {
       setAnnotations((prev) => {
@@ -537,29 +354,41 @@ export default function AppLayout() {
 
   const handleMenuColor = useCallback(
     (className) => {
-      if (!wavesurfer) return;
-      const regions = wavesurfer?.plugins?.regions;
+      const regions = getRegionsPlugin();
       const row = annotations.find((a) => a.uid === menuState.selectedUid);
-      if (!regions || !row) return;
-      const r = regions.getRegion?.(row.regionId);
-      r?.removeClass?.("region-green");
-      r?.removeClass?.("region-blue");
-      r?.addClass?.(className) ?? r?.element?.classList?.add(className);
+      const r = row ? regions?.getRegion?.(row.regionId) : null;
+      if (!r) return;
+      REGION_COLOR_CLASSES.forEach((c) =>
+        r.removeClass?.(c) ?? r.element?.classList?.remove(c)
+      );
+      if (className)
+        r.addClass?.(className) ?? r.element?.classList?.add(className);
     },
-    [wavesurfer, annotations, menuState.selectedUid]
+    [annotations, getRegionsPlugin, menuState.selectedUid]
   );
 
   const handleMenuDelete = useCallback(() => {
-    if (!wavesurfer) return;
-    const regions = wavesurfer?.plugins?.regions;
+    const regions = getRegionsPlugin();
     const row = annotations.find((a) => a.uid === menuState.selectedUid);
-    if (!regions || !row) return;
-    regions.getRegion?.(row.regionId)?.remove();
-  }, [wavesurfer, annotations, menuState.selectedUid]);
+    regions?.getRegion?.(row?.regionId)?.remove();
+  }, [annotations, getRegionsPlugin, menuState.selectedUid]);
+
+  // cor atual (para o dropdown do popup)
+  const selectedRow =
+    annotations.find((a) => a.uid === menuState.selectedUid) || null;
+  let colorClass = "";
+  if (selectedRow) {
+    const regions = getRegionsPlugin();
+    const rr = regions?.getRegion?.(selectedRow.regionId);
+    const el = rr?.element;
+    if (el?.classList) {
+      colorClass =
+        REGION_COLOR_CLASSES.find((c) => el.classList.contains(c)) || "";
+    }
+  }
 
   return (
     <AppRoot>
-      {/* Cabeçalho estático */}
       <Topbar>
         <Title>Audio Annotations</Title>
         <Actions>
@@ -568,9 +397,7 @@ export default function AppLayout() {
         </Actions>
       </Topbar>
 
-      {/* Conteúdo principal com sidebars */}
       <ContentWrapper>
-        {/* LeftControls */}
         <LeftControls>
           <SidebarControls
             selectionEnabled={selectionEnabled}
@@ -580,59 +407,44 @@ export default function AppLayout() {
           />
         </LeftControls>
 
-        {/* Sidebar de tags */}
         <TagSidebar>
           <Panel>
             <PanelTitle>Objects</PanelTitle>
             <ItemList>
-              <Item>dolphin</Item>
-              <Item>whale</Item>
-              <Item>seal</Item>
-              <Item>turtle</Item>
+              <Item>dolphin</Item><Item>whale</Item><Item>seal</Item><Item>turtle</Item>
             </ItemList>
           </Panel>
           <Panel>
             <PanelTitle>Events</PanelTitle>
-            <ItemList>
-              <Item>noise</Item>
-              <Item>nothing</Item>
-            </ItemList>
+            <ItemList><Item>noise</Item><Item>nothing</Item></ItemList>
           </Panel>
           <Panel>
             <PanelTitle>Tags</PanelTitle>
-            <ItemList>
-              <TagItem>example-tag-1</TagItem>
-              <TagItem>example-tag-2</TagItem>
-            </ItemList>
+            <ItemList><TagItem>example-tag-1</TagItem><TagItem>example-tag-2</TagItem></ItemList>
           </Panel>
         </TagSidebar>
 
-        {/* Área principal */}
         <MainArea>
           <Viewer>
-            <ViewerHeader>
-              <Badge>Waveform</Badge>
-            </ViewerHeader>
-
-            <ViewerBox>
+            <ViewerHeader><Badge>Waveform</Badge></ViewerHeader>
+            <ViewerBox ref={viewerBoxRef}>
               <SpectrogramOnClick
                 audioUrl={audioUrl}
-                onReady={setWavesurfer}
+                onReady={handleReady}
                 selectionEnabled={selectionEnabled}
                 onRegionChange={handleRegionChange}
               />
 
-              {/* Mini menu da region selecionada (opcional) */}
               <RegionMenu
                 visible={menuState.visible}
                 left={menuState.left}
                 top={menuState.top}
-                annotation={
-                  annotations.find((a) => a.uid === menuState.selectedUid) || null
-                }
+                annotation={selectedRow}
+                colorClass={colorClass}
                 onSetClass={handleSetClass}
                 onColor={handleMenuColor}
                 onDelete={handleMenuDelete}
+                onClose={() => setMenuState((m) => ({ ...m, visible: false }))}
               />
 
               <Playback>
@@ -645,7 +457,6 @@ export default function AppLayout() {
             </ViewerBox>
           </Viewer>
 
-          {/* bottom panels */}
           <Bottom>
             <BottomGrid>
               <Annotations>
@@ -657,12 +468,9 @@ export default function AppLayout() {
                   <Table>
                     <thead>
                       <tr>
-                        <Th>ID</Th>
-                        <Th>Begin (s)</Th>
-                        <Th>End (s)</Th>
-                        <Th>High Freq (Hz)</Th>
-                        <Th>Low Freq (Hz)</Th>
-                        <Th>Class</Th>
+                        <Th>ID</Th><Th>Begin (s)</Th><Th>End (s)</Th>
+                        <Th>High Freq (Hz)</Th><Th>Low Freq (Hz)</Th>
+                        <Th>Class</Th><Th>Ações</Th>
                       </tr>
                     </thead>
                     <tbody>
@@ -674,6 +482,11 @@ export default function AppLayout() {
                           <Td>{Math.round(a.highHz)}</Td>
                           <Td>{Math.round(a.lowHz)}</Td>
                           <Td>{a.className || "-"}</Td>
+                          <Td>
+                            <LinkBtn type="button" onClick={() => handleOpenMenuForUid(a.uid)}>
+                              Editar
+                            </LinkBtn>
+                          </Td>
                         </tr>
                       ))}
                     </tbody>
@@ -682,23 +495,15 @@ export default function AppLayout() {
               </Annotations>
 
               <FilesPanel>
-                <PanelHeader>
-                  <PanelTitle>Files</PanelTitle>
-                </PanelHeader>
+                <PanelHeader><PanelTitle>Files</PanelTitle></PanelHeader>
                 <FileList>
                   <FileItem>
                     <FileName>sound 8 - 2022-06-05_15_26_AMP.wav</FileName>
-                    <FileActions>
-                      <SmallBtn title="Play">▶️</SmallBtn>
-                      <SmallBtn title="Download">⬇️</SmallBtn>
-                    </FileActions>
+                    <FileActions><SmallBtn title="Play">▶️</SmallBtn><SmallBtn title="Download">⬇️</SmallBtn></FileActions>
                   </FileItem>
                   <FileItem>
                     <FileName>sound 7 - 2022-06-05_15_26_AMP.wav</FileName>
-                    <FileActions>
-                      <SmallBtn title="Play">▶️</SmallBtn>
-                      <SmallBtn title="Download">⬇️</SmallBtn>
-                    </FileActions>
+                    <FileActions><SmallBtn title="Play">▶️</SmallBtn><SmallBtn title="Download">⬇️</SmallBtn></FileActions>
                   </FileItem>
                 </FileList>
                 <BtnFull>Add File</BtnFull>
@@ -710,3 +515,5 @@ export default function AppLayout() {
     </AppRoot>
   );
 }
+
+export default AppLayout;

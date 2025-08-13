@@ -22,11 +22,19 @@ const WaveformWrapper = styled.div`
 
 const GlobalRegionStyles = createGlobalStyle`
   .wave-region { border-radius: 6px; box-shadow: inset 0 0 0 2px rgba(0,0,0,.25); backdrop-filter: saturate(105%); }
-  .region-green { background: rgba(102,255,102,.35) !important; border: 2px solid rgba(102,255,102,.9) !important; }
-  .region-blue  { background: rgba(15,131,155,.55) !important; border: 2px solid rgba(15,131,155,.95) !important; }
-  .region-selected { box-shadow: 0 0 0 2px #79ffe1, inset 0 0 0 2px rgba(0,0,0,.25) !important; }
   .wavesurfer-handle { width: 3px !important; background: rgba(255,255,255,0.7) !important; }
+  .region-selected { box-shadow: 0 0 0 2px #79ffe1, inset 0 0 0 2px rgba(0,0,0,.25) !important; }
+
+  .region-green  { background: rgba(102,255,102,.35) !important; border: 2px solid rgba(102,255,102,.9) !important; }
+  .region-blue   { background: rgba( 15,131,155,.55) !important; border: 2px solid rgba( 15,131,155,.95) !important; }
+  .region-red    { background: rgba(255, 99,132,.35) !important; border: 2px solid rgba(255, 99,132,.9) !important; }
+  .region-yellow { background: rgba(255,206, 86,.35) !important; border: 2px solid rgba(255,206, 86,.9) !important; }
+  .region-purple { background: rgba(153,102,255,.35) !important; border: 2px solid rgba(153,102,255,.9) !important; }
+  .region-orange { background: rgba(255,159, 64,.35) !important; border: 2px solid rgba(255,159, 64,.9) !important; }
+  .region-cyan   { background: rgba( 75,192,192,.35) !important; border: 2px solid rgba( 75,192,192,.9) !important; }
+  .region-pink   { background: rgba(255,105,180,.35) !important; border: 2px solid rgba(255,105,180,.9) !important; }
 `;
+
 
 export default function SpectrogramOnClick({
   audioUrl,
