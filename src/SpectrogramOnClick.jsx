@@ -1,4 +1,4 @@
-// SpectrogramOnClick.jsx
+
 import React, { useEffect, useRef } from "react";
 import PropTypes from "prop-types";
 import styled, { createGlobalStyle } from "styled-components";
@@ -20,21 +20,30 @@ const WaveformWrapper = styled.div`
   border-radius: 12px;
 `;
 
+
 const GlobalRegionStyles = createGlobalStyle`
-  .wave-region { border-radius: 6px; box-shadow: inset 0 0 0 2px rgba(0,0,0,.25); backdrop-filter: saturate(105%); }
-  .wavesurfer-handle { width: 3px !important; background: rgba(255,255,255,0.7) !important; }
-  .region-selected { box-shadow: 0 0 0 2px #79ffe1, inset 0 0 0 2px rgba(0,0,0,.25) !important; }
+  .wavesurfer-region, .region {
+    border-radius: 6px;
+    box-shadow: inset 0 0 0 2px rgba(0,0,0,.25);
+    backdrop-filter: saturate(105%);
+    transition: background .12s ease, border-color .12s ease, box-shadow .12s ease;
+  }
 
-  .region-green  { background: rgba(102,255,102,.35) !important; border: 2px solid rgba(102,255,102,.9) !important; }
-  .region-blue   { background: rgba( 15,131,155,.55) !important; border: 2px solid rgba( 15,131,155,.95) !important; }
-  .region-red    { background: rgba(255, 99,132,.35) !important; border: 2px solid rgba(255, 99,132,.9) !important; }
-  .region-yellow { background: rgba(255,206, 86,.35) !important; border: 2px solid rgba(255,206, 86,.9) !important; }
-  .region-purple { background: rgba(153,102,255,.35) !important; border: 2px solid rgba(153,102,255,.9) !important; }
-  .region-orange { background: rgba(255,159, 64,.35) !important; border: 2px solid rgba(255,159, 64,.9) !important; }
-  .region-cyan   { background: rgba( 75,192,192,.35) !important; border: 2px solid rgba( 75,192,192,.9) !important; }
-  .region-pink   { background: rgba(255,105,180,.35) !important; border: 2px solid rgba(255,105,180,.9) !important; }
+  .wavesurfer-region.region-selected, .region.region-selected {
+    box-shadow: 0 0 0 2px #79ffe1, inset 0 0 0 2px rgba(0,0,0,.25) !important;
+  }
+
+  .wavesurfer-handle, .region-handle {
+    width: 3px !important;
+    background: rgba(255,255,255,0.7) !important;
+  }
+
+  /* Verde (com !important para ganhar de inline) */
+  .wavesurfer-region.region-green, .region.region-green {
+    background: rgba(102,255,102,.35) !important;
+    border: 2px solid rgba(102,255,102,.9) !important;
+  }
 `;
-
 
 export default function SpectrogramOnClick({
   audioUrl,
@@ -49,7 +58,7 @@ export default function SpectrogramOnClick({
   const regionMapRef = useRef(new Map());
   const bufferRef = useRef(null);
 
-  // >>> mantém o callback estável (evita recriar WaveSurfer)
+ 
   const onRegionChangeRef = useRef(onRegionChange);
   useEffect(() => { onRegionChangeRef.current = onRegionChange; }, [onRegionChange]);
 
@@ -71,6 +80,31 @@ export default function SpectrogramOnClick({
     className: r.element?.className || "",
   });
   const emit = (payload) => onRegionChangeRef.current?.(payload);
+
+
+  const paintGreen = (r) => {
+    if (!r) return;
+    const el = r.element;
+    if (el?.classList) {
+      [...el.classList].forEach((c) => {
+        if (c.startsWith("region-") && c !== "region-green") el.classList.remove(c);
+      });
+    }
+    addClass(r, "region-green");
+
+   
+    try {
+      if (typeof r.setOptions === "function") r.setOptions({ color: "rgba(102,255,102,.35)" });
+      else if (typeof r.update === "function") r.update({ color: "rgba(102,255,102,.35)" });
+    } catch {}
+
+    
+    if (el) {
+      el.style.setProperty("background", "rgba(102,255,102,.35)", "important");
+      el.style.setProperty("background-color", "rgba(102,255,102,.35)", "important");
+      el.style.setProperty("border", "2px solid rgba(102,255,102,.9)", "important");
+    }
+  };
 
   // cria WaveSurfer + regions
   useEffect(() => {
@@ -124,12 +158,13 @@ export default function SpectrogramOnClick({
 
     regions.on("region-created", (r) => {
       regionMapRef.current.set(r.id, r);
-      addClass(r, "region-green");
+      paintGreen(r);           
       computeAndEmit("created", r);
     });
 
     regions.on("region-updated", (r) => {
       regionMapRef.current.set(r.id, r);
+      paintGreen(r);            
       computeAndEmit("updated", r);
     });
 
@@ -152,10 +187,8 @@ export default function SpectrogramOnClick({
       regionsRef.current = null;
       regionMapRef.current.clear();
     };
-  // 👇 só recria quando muda o ficheiro ou o onReady (que é estável)
   }, [audioUrl, onReady]);
 
-  // toggle dragSelection (compat v6/v7)
   useEffect(() => {
     const regions = regionsRef.current;
     if (!regions) return;

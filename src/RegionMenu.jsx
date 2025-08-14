@@ -1,4 +1,4 @@
-// src/RegionMenu.jsx
+
 import React from "react";
 import PropTypes from "prop-types";
 import styled from "styled-components";
@@ -38,7 +38,9 @@ const Select = styled.select`
   border-radius:8px; padding: 6px 8px; font-size: .8rem;
 `;
 
-const Actions = styled.div` display: flex; gap: 6px; margin-top: 8px; `;
+const Actions = styled.div`
+  display: flex; gap: 6px; margin-top: 8px;
+`;
 
 const Btn = styled.button`
   padding: 6px 8px; border-radius: 8px; border: 1px solid #2a2f44;
@@ -46,42 +48,12 @@ const Btn = styled.button`
   &:hover{ background:#222748; }
 `;
 
-/* ---- Paleta de cores ---- */
-const Palette = styled.div`
-  display: grid;
-  grid-template-columns: repeat(9, 1fr);
-  gap: 6px;
-`;
-
-const Swatch = styled.button`
-  height: 22px; border-radius: 6px; border: 1px solid #2a2f44; cursor: pointer;
-  background: ${(p) => p.$bg};
-  outline: none;
-  &[data-active="true"] {
-    box-shadow: 0 0 0 2px #79ffe1;
-  }
-`;
-
-const COLOR_OPTIONS = [
-  { label: "default", className: "",          bg: "linear-gradient(135deg,#1d2142,#101328)" },
-  { label: "green",   className: "region-green",  bg: "rgba(102,255,102,.65)" },
-  { label: "blue",    className: "region-blue",   bg: "rgba(15,131,155,.75)" },
-  { label: "red",     className: "region-red",    bg: "rgba(255,99,132,.75)" },
-  { label: "yellow",  className: "region-yellow", bg: "rgba(255,206,86,.75)" },
-  { label: "purple",  className: "region-purple", bg: "rgba(153,102,255,.75)" },
-  { label: "orange",  className: "region-orange", bg: "rgba(255,159,64,.75)" },
-  { label: "cyan",    className: "region-cyan",   bg: "rgba(75,192,192,.75)" },
-  { label: "pink",    className: "region-pink",   bg: "rgba(255,105,180,.75)" },
-];
-
 export default function RegionMenu({
   visible,
   left,
   top,
   annotation,
-  colorClass,
   onSetClass,
-  onColor,
   onDelete,
   onClose,
 }) {
@@ -89,20 +61,15 @@ export default function RegionMenu({
 
   const { uid, start, end, lowHz, highHz, className } = annotation;
 
-  const handlePick = (classNameToApply) => {
-    try {
-      onColor?.(classNameToApply);   // <— aplica cor na region
-    } catch (e) {
-      // evita crash do menu se quem chamou não existir
-      console.warn("onColor error:", e);
-    }
-  };
-
   return (
-    <Menu style={{ left, top }}>
+    <Menu
+      style={{ left, top }}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
       <Header>
         <span>Region</span>
-        <CloseBtn aria-label="Fechar" onClick={onClose}>×</CloseBtn>
+        <CloseBtn type="button" aria-label="Fechar" onClick={onClose}>×</CloseBtn>
       </Header>
 
       <Row><b>ID</b><span>{uid}</span></Row>
@@ -122,28 +89,8 @@ export default function RegionMenu({
         </Select>
       </Row>
 
-      <Row style={{ alignItems: "flex-start" }}>
-        <b style={{ lineHeight: "22px" }}>Color</b>
-        <div style={{ flex: 1 }}>
-          <Palette>
-            {COLOR_OPTIONS.map((opt) => (
-              <Swatch
-                key={opt.className || "default"}
-                $bg={opt.bg}
-                data-active={opt.className === (colorClass || "")}
-                title={opt.label}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handlePick(opt.className);   // <— aqui mandamos "region-blue", etc.
-                }}
-              />
-            ))}
-          </Palette>
-        </div>
-      </Row>
-
       <Actions>
-        <Btn onClick={onDelete}>Delete</Btn>
+        <Btn type="button" onClick={onDelete}>Delete</Btn>
       </Actions>
     </Menu>
   );
@@ -161,9 +108,7 @@ RegionMenu.propTypes = {
     highHz: PropTypes.number,
     className: PropTypes.string,
   }),
-  colorClass: PropTypes.string,
   onSetClass: PropTypes.func,
-  onColor: PropTypes.func,
   onDelete: PropTypes.func,
   onClose: PropTypes.func,
 };
@@ -173,9 +118,7 @@ RegionMenu.defaultProps = {
   left: 12,
   top: 8,
   annotation: null,
-  colorClass: "",
   onSetClass: null,
-  onColor: null,
   onDelete: null,
   onClose: null,
 };

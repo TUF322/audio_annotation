@@ -9,6 +9,7 @@ import {
 } from './App.js';
 
 
+
 const PlaybackControls = ({ wavesurfer, onLike, onDislike }) => {
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
