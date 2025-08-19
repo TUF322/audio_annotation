@@ -1,5 +1,5 @@
 // src/App.js
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import styled from "styled-components";
 import SpectrogramOnClick from "./SpectrogramOnClick";
 import PlaybackControls from "./PlaybackControls";
@@ -29,6 +29,36 @@ const REGION_COLOR_CLASSES = [
   "region-cyan",
   "region-pink",
 ];
+
+/* ====== helper: atribui hotkeys únicos por lista ======
+   - percorre as letras do nome da esquerda p/ a direita
+   - escolhe a 1ª letra [a-z] ainda não usada
+   - se todas estiverem ocupadas, cai para a 1ª letra alfabética do nome (mesmo repetida)
+*/
+function assignHotkeysUnique(list, taken = new Set()) {
+  const used = new Set(taken);
+  const map = new Map(); // name -> hotkey (minúscula) ou ""
+  for (const name of list) {
+    let hk = "";
+    if (typeof name === "string") {
+      const lowers = name.toLowerCase();
+      for (const ch of lowers) {
+        if (/[a-z]/.test(ch) && !used.has(ch)) {
+          hk = ch;
+          used.add(ch);
+          break;
+        }
+      }
+      if (!hk) {
+        // fallback: primeira letra [a-z] (mesmo que repita)
+        const first = (lowers.match(/[a-z]/) || [""])[0];
+        hk = first;
+      }
+    }
+    map.set(name, hk);
+  }
+  return { map, used };
+}
 
 /* helpers para focar/centrar */
 const centerTimeInView = (ws, tSec) => {
@@ -464,69 +494,100 @@ function AppLayout() {
 
   /* ================= QUICK CREATE =================
      Cria uma região a partir do tempo atual, já com type/item. */
-  // QUICK-CREATE sem helper externo (coloque em App.js)
-const quickCreate = useCallback(
-  (type, item) => {
-    const ws = wavesurfer;
-    const regions = getRegionsPlugin();
-    if (!ws || !regions) return;
+  const quickCreate = useCallback(
+    (type, item) => {
+      const ws = wavesurfer;
+      const regions = getRegionsPlugin();
+      if (!ws || !regions) return;
 
-    const dur = ws.getDuration?.() || 0;
-    if (!dur) return;
+      const dur = ws.getDuration?.() || 0;
+      if (!dur) return;
 
-    // janela padrão
-    const now = ws.getCurrentTime?.() || 0;
-    const start = Math.min(now, Math.max(0, dur - 0.05));
-    const length = Math.min(1.0, Math.max(0.25, dur * 0.03));
-    const end = Math.min(dur, start + length);
+      // janela padrão
+      const now = ws.getCurrentTime?.() || 0;
+      const start = Math.min(now, Math.max(0, dur - 0.05));
+      const length = Math.min(1.0, Math.max(0.25, dur * 0.03));
+      const end = Math.min(dur, start + length);
 
-    // cria a região já com type/item
-    const r = regions.addRegion?.({
-      start,
-      end,
-      drag: true,
-      resize: true,
-      data: { type, item },
-    });
-    if (!r) return;
-
-    // garante data no objeto Region (compat v6/v7)
-    try {
-      if (typeof r.setOptions === "function") {
-        const prev = typeof r.getData === "function" ? (r.getData() || {}) : (r.data || {});
-        r.setOptions({ data: { ...prev, type, item } });
-      } else if (typeof r.setData === "function") {
-        const prev = r.getData?.() || {};
-        r.setData({ ...prev, type, item });
-      } else {
-        r.data = { ...(r.data || {}), type, item };
-      }
-    } catch {}
-
-    // marcar seleção visual
-    selectedRegionIdRef.current = r.id;
-    r.addClass?.("region-selected") ?? r.element?.classList?.add("region-selected");
-
-    // Atualiza a tabela assim que a linha surgir (re-tenta por alguns ticks)
-    let n = 0;
-    const bump = () => {
-      setAnnotations(prev => {
-        const idx = prev.findIndex(a => a.regionId === r.id);
-        if (idx === -1) return prev;
-        const clone = prev.slice();
-        clone[idx] = { ...clone[idx], type, item };
-        return clone;
+      // cria a região já com type/item
+      const r = regions.addRegion?.({
+        start,
+        end,
+        drag: true,
+        resize: true,
+        data: { type, item },
       });
-      if (n++ < 5) setTimeout(bump, 20);
-    };
-    setTimeout(bump, 0);
-  },
-  [wavesurfer, getRegionsPlugin, setAnnotations]
-);
+      if (!r) return;
 
+      // garante data no objeto Region (compat v6/v7)
+      try {
+        if (typeof r.setOptions === "function") {
+          const prev = typeof r.getData === "function" ? (r.getData() || {}) : (r.data || {});
+          r.setOptions({ data: { ...prev, type, item } });
+        } else if (typeof r.setData === "function") {
+          const prev = r.getData?.() || {};
+          r.setData({ ...prev, type, item });
+        } else {
+          r.data = { ...(r.data || {}), type, item };
+        }
+      } catch {}
 
+      // marcar seleção visual
+      selectedRegionIdRef.current = r.id;
+      r.addClass?.("region-selected") ?? r.element?.classList?.add("region-selected");
 
-  // Hotkeys: letra = quick create (Objects têm prioridade; se não houver, Events)
+      // Atualiza a tabela assim que a linha surgir (re-tenta por alguns ticks)
+      let n = 0;
+      const bump = () => {
+        setAnnotations(prev => {
+          const idx = prev.findIndex(a => a.regionId === r.id);
+          if (idx === -1) return prev;
+          const clone = prev.slice();
+          clone[idx] = { ...clone[idx], type, item };
+          return clone;
+        });
+        if (n++ < 5) setTimeout(bump, 20);
+      };
+      setTimeout(bump, 0);
+    },
+    [wavesurfer, getRegionsPlugin, setAnnotations]
+  );
+
+  /* ====== HOTKEYS ÚNICOS ====== */
+  const { map: objHotMap } = useMemo(
+    () => assignHotkeysUnique(objectDefs),
+    [objectDefs]
+  );
+  const { map: evHotMap } = useMemo(
+    () => assignHotkeysUnique(eventDefs),
+    [eventDefs]
+  );
+
+  // estruturas para render
+  const objectRows = useMemo(
+    () => objectDefs.map((name) => ({ name, hk: objHotMap.get(name) || "" })),
+    [objectDefs, objHotMap]
+  );
+  const eventRows = useMemo(
+    () => eventDefs.map((name) => ({ name, hk: evHotMap.get(name) || "" })),
+    [eventDefs, evHotMap]
+  );
+
+  // mapa de tecla -> { type, item } (objetos têm prioridade)
+  const hotkeyMap = useMemo(() => {
+    const m = {};
+    for (const name of objectDefs) {
+      const hk = (objHotMap.get(name) || "").toLowerCase();
+      if (hk) m[hk] = { type: "object", item: name };
+    }
+    for (const name of eventDefs) {
+      const hk = (evHotMap.get(name) || "").toLowerCase();
+      if (hk && !m[hk]) m[hk] = { type: "event", item: name };
+    }
+    return m;
+  }, [objectDefs, eventDefs, objHotMap, evHotMap]);
+
+  // Hotkeys globais para quick-create
   useEffect(() => {
     const onKey = (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
@@ -536,30 +597,26 @@ const quickCreate = useCallback(
       const key = e.key?.toLowerCase();
       if (!key || key.length !== 1) return;
 
-      const obj = objectDefs.find((o) => o?.[0]?.toLowerCase() === key);
-      if (obj) {
+      const entry = hotkeyMap[key];
+      if (entry) {
         e.preventDefault();
-        quickCreate("object", obj);
-        return;
-      }
-      const ev = eventDefs.find((x) => x?.[0]?.toLowerCase() === key);
-      if (ev) {
-        e.preventDefault();
-        quickCreate("event", ev);
+        quickCreate(entry.type, entry.item);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [objectDefs, eventDefs, quickCreate]);
+  }, [hotkeyMap, quickCreate]);
 
   // Cor atual (se precisares mais tarde para destacar)
-  const selectedRow = annotations.find((a) => a.uid === menuState.selectedUid) || null;
+  const selectedRow =
+    annotations.find((a) => a.uid === menuState.selectedUid) || null;
   let colorClass = "";
   if (selectedRow) {
     const r = getRegionById(selectedRow.regionId);
     const el = r?.element;
     if (el?.classList) {
-      colorClass = REGION_COLOR_CLASSES.find((c) => el.classList.contains(c)) || "";
+      colorClass =
+        REGION_COLOR_CLASSES.find((c) => el.classList.contains(c)) || "";
     }
   }
 
@@ -599,34 +656,34 @@ const quickCreate = useCallback(
           <Panel>
             <PanelTitle>Objects</PanelTitle>
             <ItemList>
-              {objectDefs.map((o) => (
-                <Item key={o} onClick={() => quickCreate("object", o)} title={`Quick create "${o}"`}>
-                  <ItemLabel>{o}</ItemLabel>
+              {objectRows.map(({ name, hk }) => (
+                <Item key={name} onClick={() => quickCreate("object", name)} title={`Quick create "${name}"`}>
+                  <ItemLabel>{name}</ItemLabel>
                   <KeyBadge
                     type="button"
-                    title={`Quick create "${o}" (tecla "${o[0]?.toUpperCase()}")`}
-                    onClick={(e) => { e.stopPropagation(); quickCreate("object", o); }}
+                    title={`Quick create "${name}" (tecla "${(hk || "?").toUpperCase()}")`}
+                    onClick={(e) => { e.stopPropagation(); quickCreate("object", name); }}
                   >
-                    {o[0]?.toUpperCase() || "?"}
+                    {(hk || "?").toUpperCase()}
                   </KeyBadge>
                 </Item>
               ))}
             </ItemList>
           </Panel>
 
-          {/* EVENTS — também quick create */}
+          {/* EVENTS — também quick create (hotkeys únicos dentro do grupo) */}
           <Panel>
             <PanelTitle>Events</PanelTitle>
             <ItemList>
-              {eventDefs.map((ev) => (
-                <Item key={ev} onClick={() => quickCreate("event", ev)} title={`Quick create "${ev}"`}>
-                  <ItemLabel>{ev}</ItemLabel>
+              {eventRows.map(({ name, hk }) => (
+                <Item key={name} onClick={() => quickCreate("event", name)} title={`Quick create "${name}"`}>
+                  <ItemLabel>{name}</ItemLabel>
                   <KeyBadge
                     type="button"
-                    title={`Quick create "${ev}" (tecla "${ev[0]?.toUpperCase()}")`}
-                    onClick={(e) => { e.stopPropagation(); quickCreate("event", ev); }}
+                    title={`Quick create "${name}" (tecla "${(hk || "?").toUpperCase()}")`}
+                    onClick={(e) => { e.stopPropagation(); quickCreate("event", name); }}
                   >
-                    {ev[0]?.toUpperCase() || "?"}
+                    {(hk || "?").toUpperCase()}
                   </KeyBadge>
                 </Item>
               ))}
