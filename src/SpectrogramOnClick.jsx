@@ -1,3 +1,4 @@
+// src/SpectrogramOnClick.jsx
 import React, { useEffect, useRef } from "react";
 import PropTypes from "prop-types";
 import styled, { createGlobalStyle } from "styled-components";
@@ -26,17 +27,13 @@ const GlobalRegionStyles = createGlobalStyle`
     backdrop-filter: saturate(105%);
     transition: background .12s ease, border-color .12s ease, box-shadow .12s ease;
   }
-
   .wavesurfer-region.region-selected, .region.region-selected {
     box-shadow: 0 0 0 2px #79ffe1, inset 0 0 0 2px rgba(0,0,0,.25) !important;
   }
-
   .wavesurfer-handle, .region-handle {
     width: 3px !important;
     background: rgba(255,255,255,0.7) !important;
   }
-
-  /* Verde (com !important para ganhar de inline) */
   .wavesurfer-region.region-green, .region.region-green {
     background: rgba(102,255,102,.35) !important;
     border: 2px solid rgba(102,255,102,.9) !important;
@@ -48,8 +45,7 @@ export default function SpectrogramOnClick({
   onReady,
   selectionEnabled,
   onRegionChange,
-  /** <-- NOVO: ref para comandos externos (delete/focus) */
-  apiRef,
+  createPreset, // { type, item } para próxima região
 }) {
   const waveformRef = useRef(null);
   const wsRef = useRef(null);
@@ -58,10 +54,13 @@ export default function SpectrogramOnClick({
   const regionMapRef = useRef(new Map());
   const bufferRef = useRef(null);
 
+  // manter callbacks/preset em refs para evitar recriar WS
   const onRegionChangeRef = useRef(onRegionChange);
   useEffect(() => { onRegionChangeRef.current = onRegionChange; }, [onRegionChange]);
 
-  // helpers
+  const presetRef = useRef(createPreset);
+  useEffect(() => { presetRef.current = createPreset; }, [createPreset]);
+
   const addClass = (r, cls) => { r?.addClass?.(cls) ?? r?.element?.classList?.add(cls); };
   const removeClass = (r, cls) => { r?.removeClass?.(cls) ?? r?.element?.classList?.remove(cls); };
   const getRegion = (id) => regionMapRef.current.get(id);
@@ -71,33 +70,6 @@ export default function SpectrogramOnClick({
     selectedIdRef.current = id;
     addClass(getRegion(id), "region-selected");
   };
-
-  const centerTimeInView = (tSec) => {
-    const ws = wsRef.current;
-    const wrapper = ws?.drawer?.wrapper;
-    const dur = ws?.getDuration?.() || 0;
-    if (!wrapper || !dur) return;
-    const total = wrapper.scrollWidth;
-    const view = wrapper.clientWidth;
-    const target = (tSec / dur) * total - view / 2;
-    wrapper.scrollLeft = Math.max(0, Math.min(target, total - view));
-  };
-
-  const focusRegionInternal = (r) => {
-    if (!r) return false;
-    selectRegion(r.id);
-    const ws = wsRef.current;
-    const dur = ws?.getDuration?.() || 0;
-    const mid = (r.start + r.end) / 2;
-    const ratio = dur ? Math.min(0.999, mid / dur) : 0;
-    if (typeof ws?.seekAndCenter === "function") ws.seekAndCenter(ratio);
-    else {
-      ws?.seekTo?.(ratio);
-      centerTimeInView(mid);
-    }
-    return true;
-  };
-
   const serializeRegion = (r, metrics) => ({
     id: r.id,
     start: r.start,
@@ -105,7 +77,6 @@ export default function SpectrogramOnClick({
     data: { ...(r.data || {}), ...(metrics ? { metrics } : {}) },
     className: r.element?.className || "",
   });
-  const emit = (payload) => onRegionChangeRef.current?.(payload);
 
   const paintGreen = (r) => {
     if (!r) return;
@@ -116,12 +87,10 @@ export default function SpectrogramOnClick({
       });
     }
     addClass(r, "region-green");
-
     try {
       if (typeof r.setOptions === "function") r.setOptions({ color: "rgba(102,255,102,.35)" });
       else if (typeof r.update === "function") r.update({ color: "rgba(102,255,102,.35)" });
     } catch {}
-
     if (el) {
       el.style.setProperty("background", "rgba(102,255,102,.35)", "important");
       el.style.setProperty("background-color", "rgba(102,255,102,.35)", "important");
@@ -129,7 +98,7 @@ export default function SpectrogramOnClick({
     }
   };
 
-  // cria WaveSurfer + regions
+  // cria WaveSurfer (NÃO depende de createPreset!)
   useEffect(() => {
     const ws = WaveSurfer.create({
       container: waveformRef.current,
@@ -148,6 +117,7 @@ export default function SpectrogramOnClick({
 
     const regions = RegionsPlugin.create({ dragSelection: false });
     ws.registerPlugin(regions);
+    ws._regionsPlugin = regions;
 
     ws.on("ready", () => {
       bufferRef.current = ws.getDecodedData();
@@ -164,13 +134,11 @@ export default function SpectrogramOnClick({
           console.warn("measureRegionFreqs error:", e);
         }
       }
-
       const waveRect = waveformRef.current?.getBoundingClientRect();
       const elRect = r.element?.getBoundingClientRect();
       const left = waveRect && elRect ? Math.max(8, Math.min(elRect.left - waveRect.left, waveRect.width - 220)) : 12;
       const top = 8;
-
-      emit({ type, region: serializeRegion(r, metrics), menuPos: { left, top } });
+      onRegionChangeRef.current?.({ type, region: serializeRegion(r, metrics), menuPos: { left, top } });
     };
 
     regions.on("region-clicked", (r, e) => {
@@ -180,6 +148,11 @@ export default function SpectrogramOnClick({
     });
 
     regions.on("region-created", (r) => {
+      // aplica preset atual SEM recriar WS
+      const preset = presetRef.current;
+      if (preset && typeof preset === "object") {
+        r.data = { ...(r.data || {}), type: preset.type || "object", item: preset.item || "" };
+      }
       regionMapRef.current.set(r.id, r);
       paintGreen(r);
       computeAndEmit("created", r);
@@ -210,8 +183,9 @@ export default function SpectrogramOnClick({
       regionsRef.current = null;
       regionMapRef.current.clear();
     };
-  }, [audioUrl, onReady]);
+  }, [audioUrl, onReady]); // <- sem createPreset aqui
 
+  // só alterna dragSelection quando muda a flag
   useEffect(() => {
     const regions = regionsRef.current;
     if (!regions) return;
@@ -229,42 +203,6 @@ export default function SpectrogramOnClick({
     }
   }, [selectionEnabled]);
 
-  // ===== Expor API ao pai =====
-  useEffect(() => {
-    if (!apiRef) return;
-    apiRef.current = {
-      removeRegion: (id) => {
-        const r = getRegion(id);
-        if (r?.remove) {
-          try { r.remove(); return true; } catch {}
-        }
-
-        // Fallback duro: remove o elemento + sinaliza "removed"
-        const el =
-          r?.element ||
-          waveformRef.current?.querySelector(`.wavesurfer-region[data-id="${id}"], .region[data-id="${id}"]`);
-        if (el && el.parentNode) {
-          try { el.parentNode.removeChild(el); } catch {}
-        }
-        regionMapRef.current.delete(id);
-        if (selectedIdRef.current === id) selectedIdRef.current = null;
-
-        // emite evento de removed para sincronizar App
-        emit({ type: "removed", region: { id, start: 0, end: 0, data: {} } });
-        return true;
-      },
-
-      focusRegion: (id) => {
-        const r = getRegion(id);
-        if (!r) return false;
-        focusRegionInternal(r);
-        return true;
-      },
-    };
-
-    return () => { apiRef.current = null; };
-  }, [apiRef]);
-
   return (
     <Container>
       <GlobalRegionStyles />
@@ -278,12 +216,12 @@ SpectrogramOnClick.propTypes = {
   onReady: PropTypes.func,
   selectionEnabled: PropTypes.bool,
   onRegionChange: PropTypes.func,
-  apiRef: PropTypes.object, // useRef passado pelo pai
+  createPreset: PropTypes.object,
 };
 
 SpectrogramOnClick.defaultProps = {
   onReady: null,
   selectionEnabled: false,
   onRegionChange: null,
-  apiRef: null,
+  createPreset: null,
 };
