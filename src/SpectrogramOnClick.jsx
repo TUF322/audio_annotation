@@ -27,13 +27,16 @@ const GlobalRegionStyles = createGlobalStyle`
     backdrop-filter: saturate(105%);
     transition: background .12s ease, border-color .12s ease, box-shadow .12s ease;
   }
+
   .wavesurfer-region.region-selected, .region.region-selected {
-    box-shadow: 0 0 0 2px #79ffe1, inset 0 0 0 2px rgba(0,0,0,.25) !important;
+    box-shadow: 0 0 0 2px #79ffe1, inset 0 0 0 2px rgba(0,0,0,0.25) !important;
   }
+
   .wavesurfer-handle, .region-handle {
     width: 3px !important;
     background: rgba(255,255,255,0.7) !important;
   }
+
   .wavesurfer-region.region-green, .region.region-green {
     background: rgba(102,255,102,.35) !important;
     border: 2px solid rgba(102,255,102,.9) !important;
@@ -45,7 +48,6 @@ export default function SpectrogramOnClick({
   onReady,
   selectionEnabled,
   onRegionChange,
-  createPreset, // { type, item } para próxima região
 }) {
   const waveformRef = useRef(null);
   const wsRef = useRef(null);
@@ -54,12 +56,8 @@ export default function SpectrogramOnClick({
   const regionMapRef = useRef(new Map());
   const bufferRef = useRef(null);
 
-  // manter callbacks/preset em refs para evitar recriar WS
   const onRegionChangeRef = useRef(onRegionChange);
   useEffect(() => { onRegionChangeRef.current = onRegionChange; }, [onRegionChange]);
-
-  const presetRef = useRef(createPreset);
-  useEffect(() => { presetRef.current = createPreset; }, [createPreset]);
 
   const addClass = (r, cls) => { r?.addClass?.(cls) ?? r?.element?.classList?.add(cls); };
   const removeClass = (r, cls) => { r?.removeClass?.(cls) ?? r?.element?.classList?.remove(cls); };
@@ -70,21 +68,36 @@ export default function SpectrogramOnClick({
     selectedIdRef.current = id;
     addClass(getRegion(id), "region-selected");
   };
-  const serializeRegion = (r, metrics) => ({
-    id: r.id,
-    start: r.start,
-    end: r.end,
-    data: { ...(r.data || {}), ...(metrics ? { metrics } : {}) },
-    className: r.element?.className || "",
-  });
+
+  const getData = (r) =>
+    (typeof r?.getData === "function" ? r.getData() : r?.data) || {};
+  const setData = (r, data) => {
+    try {
+      if (typeof r.setData === "function") r.setData(data);
+      else if (typeof r.setOptions === "function") r.setOptions({ data });
+      else r.data = data;
+    } catch {
+      r.data = { ...(r.data || {}), ...data };
+    }
+  };
+
+  const serializeRegion = (r, metrics) => {
+    const d = getData(r);
+    return {
+      id: r.id,
+      start: r.start,
+      end: r.end,
+      data: { ...d, ...(metrics ? { metrics } : {}) },
+      className: r.element?.className || "",
+    };
+  };
+  const emit = (payload) => onRegionChangeRef.current?.(payload);
 
   const paintGreen = (r) => {
     if (!r) return;
     const el = r.element;
     if (el?.classList) {
-      [...el.classList].forEach((c) => {
-        if (c.startsWith("region-") && c !== "region-green") el.classList.remove(c);
-      });
+      [...el.classList].forEach((c) => { if (c.startsWith("region-") && c !== "region-green") el.classList.remove(c); });
     }
     addClass(r, "region-green");
     try {
@@ -98,7 +111,80 @@ export default function SpectrogramOnClick({
     }
   };
 
-  // cria WaveSurfer (NÃO depende de createPreset!)
+  /* ========== LABEL + NUMERAÇÃO ========== not working :,( */
+
+  const computeLabelText = (base, idx) =>
+    !base ? "" : idx > 1 ? `${base} ${idx}` : base;
+
+  // Base do nome (vindo de item/labelBase/label)
+  const baseOf = (r) => {
+    const d = getData(r);
+    return (
+      d.labelBase ||
+      d.item ||
+      (d.label ? d.label.replace(/\s+\d+$/, "") : "") ||
+      ""
+    );
+  };
+
+  const ensureRegionLabel = (r) => {
+    const el = r?.element;
+    if (!el) return;
+
+    const d = getData(r);
+    const base = baseOf(r);
+    if (!base) return;
+
+    const idx = d.labelIndex || 1;
+    const text = computeLabelText(base, idx);
+
+    setData(r, { ...d, labelBase: base, labelIndex: idx, label: text });
+    el.dataset.label = text;
+    el.style.overflow = "visible";
+
+    let lbl = el.querySelector(".region-label");
+    if (!lbl) {
+      lbl = document.createElement("div");
+      lbl.className = "region-label";
+      Object.assign(lbl.style, {
+        position: "absolute",
+        top: "4px",
+        left: "6px",
+        zIndex: 5,
+        padding: "2px 8px",
+        fontSize: "11px",
+        lineHeight: "1",
+        color: "#fff",
+        background: "rgba(0,0,0,0.55)",
+        border: "1px solid rgba(255,255,255,0.18)",
+        borderRadius: "8px",
+        pointerEvents: "none",
+        whiteSpace: "nowrap",
+      });
+      el.appendChild(lbl);
+    }
+    lbl.textContent = text;
+  };
+
+  
+  const renumberAll = (base) => {
+    if (!base) return;
+    const list = [];
+    regionMapRef.current.forEach((r) => {
+      if (baseOf(r) === base) list.push(r);
+    });
+    // ordem estável (por start)
+    list.sort((a, b) => a.start - b.start);
+    list.forEach((r, i) => {
+      const idx = i + 1;
+      const d = getData(r);
+      setData(r, { ...d, labelBase: base, labelIndex: idx, label: computeLabelText(base, idx) });
+      ensureRegionLabel(r);
+    });
+  };
+
+  /* ======================================== */
+
   useEffect(() => {
     const ws = WaveSurfer.create({
       container: waveformRef.current,
@@ -117,7 +203,6 @@ export default function SpectrogramOnClick({
 
     const regions = RegionsPlugin.create({ dragSelection: false });
     ws.registerPlugin(regions);
-    ws._regionsPlugin = regions;
 
     ws.on("ready", () => {
       bufferRef.current = ws.getDecodedData();
@@ -138,35 +223,55 @@ export default function SpectrogramOnClick({
       const elRect = r.element?.getBoundingClientRect();
       const left = waveRect && elRect ? Math.max(8, Math.min(elRect.left - waveRect.left, waveRect.width - 220)) : 12;
       const top = 8;
-      onRegionChangeRef.current?.({ type, region: serializeRegion(r, metrics), menuPos: { left, top } });
+
+      emit({ type, region: serializeRegion(r, metrics), menuPos: { left, top } });
     };
 
     regions.on("region-clicked", (r, e) => {
       e.stopPropagation?.();
       selectRegion(r.id);
+      ensureRegionLabel(r);
       computeAndEmit("selected", r);
     });
 
     regions.on("region-created", (r) => {
-      // aplica preset atual SEM recriar WS
-      const preset = presetRef.current;
-      if (preset && typeof preset === "object") {
-        r.data = { ...(r.data || {}), type: preset.type || "object", item: preset.item || "" };
-      }
       regionMapRef.current.set(r.id, r);
       paintGreen(r);
+
+      // se vier com item do quick-create, usa-o como base
+      const d = getData(r);
+      const base = d.item || d.labelBase || "";
+      if (base) {
+        // coloca temporariamente index 1 e renumera todos
+        setData(r, { ...d, labelBase: base, labelIndex: 1 });
+        renumberAll(base);
+      } else {
+        ensureRegionLabel(r);
+      }
+
       computeAndEmit("created", r);
     });
 
     regions.on("region-updated", (r) => {
       regionMapRef.current.set(r.id, r);
       paintGreen(r);
+      const base = baseOf(r);
+      if (base) renumberAll(base);
+      else ensureRegionLabel(r);
       computeAndEmit("updated", r);
     });
 
+    regions.on("region-update-end", (r) => {
+      const base = baseOf(r);
+      if (base) renumberAll(base);
+      else ensureRegionLabel(r);
+    });
+
     regions.on("region-removed", (r) => {
+      const base = baseOf(r); // captura antes de remover
       regionMapRef.current.delete(r.id);
       if (selectedIdRef.current === r.id) selectedIdRef.current = null;
+      if (base) renumberAll(base);
       computeAndEmit("removed", r);
     });
 
@@ -183,9 +288,8 @@ export default function SpectrogramOnClick({
       regionsRef.current = null;
       regionMapRef.current.clear();
     };
-  }, [audioUrl, onReady]); // <- sem createPreset aqui
+  }, [audioUrl, onReady]);
 
-  // só alterna dragSelection quando muda a flag
   useEffect(() => {
     const regions = regionsRef.current;
     if (!regions) return;
@@ -216,12 +320,10 @@ SpectrogramOnClick.propTypes = {
   onReady: PropTypes.func,
   selectionEnabled: PropTypes.bool,
   onRegionChange: PropTypes.func,
-  createPreset: PropTypes.object,
 };
 
 SpectrogramOnClick.defaultProps = {
   onReady: null,
   selectionEnabled: false,
   onRegionChange: null,
-  createPreset: null,
 };

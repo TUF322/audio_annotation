@@ -247,7 +247,7 @@ const PlusBtn = styled.button`
 
 /* ============== componente ============== */
 function AppLayout() {
-  const [audioUrl] = useState("/audio/10hz.mp3");
+  const [audioUrl] = useState("/audio/whale.mp3");
   const [wavesurfer, setWavesurfer] = useState(null);
 
   const [selectionEnabled, setSelectionEnabled] = useState(false);
@@ -264,7 +264,7 @@ function AppLayout() {
     selectedUid: null,
   });
 
-  // DEFINITIONS + modal
+  // DEFINITIONS + modal 
   const [objectDefs, setObjectDefs] = useState(["dolphin", "whale", "seal", "turtle"]);
   const [eventDefs, setEventDefs] = useState(["noise", "nothing"]);
   const [tagDefs, setTagDefs] = useState(["lorem", "ipsum", "dolor", "uter"]);
@@ -304,7 +304,7 @@ function AppLayout() {
     return null;
   }, [wavesurfer]);
 
-  // encontrar Region por id
+  // encontrar Region por id 
   const getRegionById = useCallback(
     (rid) => {
       const regions = getRegionsPlugin();
@@ -418,7 +418,7 @@ function AppLayout() {
     [getRegionById]
   );
 
-  // focar/centrar por annotation (usado no botão Seek da tabela)
+  // focar/centrar por annotation (usado no botão Seek da tabela) 
   const seekAnnotation = useCallback(
     (uid) => {
       if (!wavesurfer) return;
@@ -494,64 +494,99 @@ function AppLayout() {
 
   /* ================= QUICK CREATE =================
      Cria uma região a partir do tempo atual, já com type/item. */
-  const quickCreate = useCallback(
-    (type, item) => {
-      const ws = wavesurfer;
-      const regions = getRegionsPlugin();
-      if (!ws || !regions) return;
+  // QUICK-CREATE (cria região já com type/item e desenha o rótulo imediatamente)
+const quickCreate = useCallback(
+  (type, item) => {
+    const ws = wavesurfer;
+    const regions = getRegionsPlugin();
+    if (!ws || !regions) return;
 
-      const dur = ws.getDuration?.() || 0;
-      if (!dur) return;
+    const dur = ws.getDuration?.() || 0;
+    if (!dur) return;
 
-      // janela padrão
-      const now = ws.getCurrentTime?.() || 0;
-      const start = Math.min(now, Math.max(0, dur - 0.05));
-      const length = Math.min(1.0, Math.max(0.25, dur * 0.03));
-      const end = Math.min(dur, start + length);
+    const now = ws.getCurrentTime?.() || 0;
+    const start = Math.min(now, Math.max(0, dur - 0.05));
+    const length = Math.min(1.0, Math.max(0.25, dur * 0.03));
+    const end = Math.min(dur, start + length);
 
-      // cria a região já com type/item
-      const r = regions.addRegion?.({
-        start,
-        end,
-        drag: true,
-        resize: true,
-        data: { type, item },
-      });
-      if (!r) return;
+    // cria já com metadados
+    const r = regions.addRegion?.({
+      start,
+      end,
+      drag: true,
+      resize: true,
+      data: { type, item, label: item },
+    });
+    if (!r) return;
 
-      // garante data no objeto Region (compat v6/v7)
-      try {
-        if (typeof r.setOptions === "function") {
-          const prev = typeof r.getData === "function" ? (r.getData() || {}) : (r.data || {});
-          r.setOptions({ data: { ...prev, type, item } });
-        } else if (typeof r.setData === "function") {
-          const prev = r.getData?.() || {};
-          r.setData({ ...prev, type, item });
-        } else {
-          r.data = { ...(r.data || {}), type, item };
-        }
-      } catch {}
+    // garante que os metadados ficam na instância (v6/v7)
+    try {
+      if (typeof r.setOptions === "function") {
+        const prev = typeof r.getData === "function" ? (r.getData() || {}) : (r.data || {});
+        r.setOptions({ data: { ...prev, type, item, label: item } });
+      } else if (typeof r.setData === "function") {
+        const prev = r.getData?.() || {};
+        r.setData({ ...prev, type, item, label: item });
+      } else {
+        r.data = { ...(r.data || {}), type, item, label: item };
+      }
+    } catch {}
 
-      // marcar seleção visual
-      selectedRegionIdRef.current = r.id;
-      r.addClass?.("region-selected") ?? r.element?.classList?.add("region-selected");
+    // ==== rótulo imediato no DOM ====
+    const makeLabel = (reg, text) => {
+      const el = reg?.element;
+      if (!el) return;
+      el.style.overflow = "visible";
+      el.dataset.label = text; // fallback extra p/ outras rotinas
 
-      // Atualiza a tabela assim que a linha surgir (re-tenta por alguns ticks)
-      let n = 0;
-      const bump = () => {
-        setAnnotations(prev => {
-          const idx = prev.findIndex(a => a.regionId === r.id);
-          if (idx === -1) return prev;
-          const clone = prev.slice();
-          clone[idx] = { ...clone[idx], type, item };
-          return clone;
+      let lbl = el.querySelector(".region-label");
+      if (!lbl) {
+        lbl = document.createElement("div");
+        lbl.className = "region-label";
+        // estilos inline para não depender de CSS externo
+        Object.assign(lbl.style, {
+          position: "absolute",
+          top: "4px",
+          left: "6px",
+          zIndex: 5,
+          padding: "2px 8px",
+          fontSize: "11px",
+          lineHeight: "1",
+          color: "#fff",
+          background: "rgba(0,0,0,0.55)",
+          border: "1px solid rgba(255,255,255,0.18)",
+          borderRadius: "8px",
+          pointerEvents: "none",
+          whiteSpace: "nowrap",
         });
-        if (n++ < 5) setTimeout(bump, 20);
-      };
-      setTimeout(bump, 0);
-    },
-    [wavesurfer, getRegionsPlugin, setAnnotations]
-  );
+        el.appendChild(lbl);
+      }
+      lbl.textContent = text || "";
+    };
+    makeLabel(r, item);
+    // =================================
+
+    // seleção visual
+    selectedRegionIdRef.current = r.id;
+    r.addClass?.("region-selected") ?? r.element?.classList?.add("region-selected");
+
+    // sincroniza tabela (re-tentativas rápidas)
+    let n = 0;
+    const bump = () => {
+      setAnnotations(prev => {
+        const idx = prev.findIndex(a => a.regionId === r.id);
+        if (idx === -1) return prev;
+        const clone = prev.slice();
+        clone[idx] = { ...clone[idx], type, item };
+        return clone;
+      });
+      if (n++ < 5) setTimeout(bump, 20);
+    };
+    setTimeout(bump, 0);
+  },
+  [wavesurfer, getRegionsPlugin, setAnnotations]
+);
+
 
   /* ====== HOTKEYS ÚNICOS ====== */
   const { map: objHotMap } = useMemo(
@@ -573,7 +608,7 @@ function AppLayout() {
     [eventDefs, evHotMap]
   );
 
-  // mapa de tecla -> { type, item } (objetos têm prioridade)
+  // mapa de tecla -> { type, item } (objetos têm prioridade)  
   const hotkeyMap = useMemo(() => {
     const m = {};
     for (const name of objectDefs) {
@@ -587,7 +622,8 @@ function AppLayout() {
     return m;
   }, [objectDefs, eventDefs, objHotMap, evHotMap]);
 
-  // Hotkeys globais para quick-create
+  // Hotkeys globais para quick-create 
+
   useEffect(() => {
     const onKey = (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
@@ -607,7 +643,7 @@ function AppLayout() {
     return () => window.removeEventListener("keydown", onKey);
   }, [hotkeyMap, quickCreate]);
 
-  // Cor atual (se precisares mais tarde para destacar)
+  // Cor atual (se precisares mais tarde para destacar) 
   const selectedRow =
     annotations.find((a) => a.uid === menuState.selectedUid) || null;
   let colorClass = "";
@@ -707,7 +743,7 @@ function AppLayout() {
                 onRegionChange={handleRegionChange}
               />
 
-              {/* Popup da região: só DELETE + selects type/item */}
+              {/* Popup da região: só DELETE + selects type/item   */}
               <RegionMenu
                 visible={menuState.visible}
                 left={menuState.left}
