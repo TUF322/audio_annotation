@@ -58,7 +58,7 @@ export default function RegionMenu({
   onDelete,
   onClose,
 }) {
-  // manter hooks SEM retornos condicionais
+  // manter hooks SEM retornos condicionais 
   const safeAnn = annotation || {
     uid: 0, start: 0, end: 0, lowHz: 0, highHz: 0, type: "object", item: ""
   };
@@ -102,7 +102,7 @@ export default function RegionMenu({
         </Select>
       </Row>
 
-      {/* Aqui só DELETE (o Seek e Edit ficam na tabela em baixo) */}
+      {/* Aqui só DELETE (o Seek e Edit ficam na tabela em baixo)  */}
       <Actions>
         <DangerBtn type="button" onClick={onDelete}>Delete</DangerBtn>
       </Actions>

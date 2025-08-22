@@ -1,5 +1,5 @@
 // src/App.js
-import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import styled from "styled-components";
 import SpectrogramOnClick from "./SpectrogramOnClick";
 import PlaybackControls from "./PlaybackControls";
@@ -29,36 +29,6 @@ const REGION_COLOR_CLASSES = [
   "region-cyan",
   "region-pink",
 ];
-
-/* ====== helper: atribui hotkeys únicos por lista ======
-   - percorre as letras do nome da esquerda p/ a direita
-   - escolhe a 1ª letra [a-z] ainda não usada
-   - se todas estiverem ocupadas, cai para a 1ª letra alfabética do nome (mesmo repetida)
-*/
-function assignHotkeysUnique(list, taken = new Set()) {
-  const used = new Set(taken);
-  const map = new Map(); // name -> hotkey (minúscula) ou ""
-  for (const name of list) {
-    let hk = "";
-    if (typeof name === "string") {
-      const lowers = name.toLowerCase();
-      for (const ch of lowers) {
-        if (/[a-z]/.test(ch) && !used.has(ch)) {
-          hk = ch;
-          used.add(ch);
-          break;
-        }
-      }
-      if (!hk) {
-        // fallback: primeira letra [a-z] (mesmo que repita)
-        const first = (lowers.match(/[a-z]/) || [""])[0];
-        hk = first;
-      }
-    }
-    map.set(name, hk);
-  }
-  return { map, used };
-}
 
 /* helpers para focar/centrar */
 const centerTimeInView = (ws, tSec) => {
@@ -247,7 +217,10 @@ const PlusBtn = styled.button`
 
 /* ============== componente ============== */
 function AppLayout() {
-  const [audioUrl] = useState("/audio/whale.mp3");
+  const [audioUrl, setAudioUrl] = useState("/audio/10hz.mp3");
+  const [audioFiles, setAudioFiles] = useState([]); // {name, url}
+  const fileInputRef = useRef(null);
+
   const [wavesurfer, setWavesurfer] = useState(null);
 
   const [selectionEnabled, setSelectionEnabled] = useState(false);
@@ -264,7 +237,7 @@ function AppLayout() {
     selectedUid: null,
   });
 
-  // DEFINITIONS + modal 
+  // DEFINITIONS + modal
   const [objectDefs, setObjectDefs] = useState(["dolphin", "whale", "seal", "turtle"]);
   const [eventDefs, setEventDefs] = useState(["noise", "nothing"]);
   const [tagDefs, setTagDefs] = useState(["lorem", "ipsum", "dolor", "uter"]);
@@ -304,7 +277,7 @@ function AppLayout() {
     return null;
   }, [wavesurfer]);
 
-  // encontrar Region por id 
+  // encontrar Region por id
   const getRegionById = useCallback(
     (rid) => {
       const regions = getRegionsPlugin();
@@ -418,7 +391,7 @@ function AppLayout() {
     [getRegionById]
   );
 
-  // focar/centrar por annotation (usado no botão Seek da tabela) 
+  // focar/centrar por annotation (usado no botão Seek da tabela)
   const seekAnnotation = useCallback(
     (uid) => {
       if (!wavesurfer) return;
@@ -492,138 +465,62 @@ function AppLayout() {
     setMenuState((m) => ({ ...m, visible: false }));
   }, [annotations, menuState.selectedUid, getRegionById]);
 
-  /* ================= QUICK CREATE =================
-     Cria uma região a partir do tempo atual, já com type/item. */
-  // QUICK-CREATE (cria região já com type/item e desenha o rótulo imediatamente)
-const quickCreate = useCallback(
-  (type, item) => {
-    const ws = wavesurfer;
-    const regions = getRegionsPlugin();
-    if (!ws || !regions) return;
+  /* ================= QUICK CREATE ================= */
+  const quickCreate = useCallback(
+    (type, item) => {
+      const ws = wavesurfer;
+      const regions = getRegionsPlugin();
+      if (!ws || !regions) return;
 
-    const dur = ws.getDuration?.() || 0;
-    if (!dur) return;
+      const dur = ws.getDuration?.() || 0;
+      if (!dur) return;
 
-    const now = ws.getCurrentTime?.() || 0;
-    const start = Math.min(now, Math.max(0, dur - 0.05));
-    const length = Math.min(1.0, Math.max(0.25, dur * 0.03));
-    const end = Math.min(dur, start + length);
+      const now = ws.getCurrentTime?.() || 0;
+      const start = Math.min(now, Math.max(0, dur - 0.05));
+      const length = Math.min(1.0, Math.max(0.25, dur * 0.03));
+      const end = Math.min(dur, start + length);
 
-    // cria já com metadados
-    const r = regions.addRegion?.({
-      start,
-      end,
-      drag: true,
-      resize: true,
-      data: { type, item, label: item },
-    });
-    if (!r) return;
-
-    // garante que os metadados ficam na instância (v6/v7)
-    try {
-      if (typeof r.setOptions === "function") {
-        const prev = typeof r.getData === "function" ? (r.getData() || {}) : (r.data || {});
-        r.setOptions({ data: { ...prev, type, item, label: item } });
-      } else if (typeof r.setData === "function") {
-        const prev = r.getData?.() || {};
-        r.setData({ ...prev, type, item, label: item });
-      } else {
-        r.data = { ...(r.data || {}), type, item, label: item };
-      }
-    } catch {}
-
-    // ==== rótulo imediato no DOM ====
-    const makeLabel = (reg, text) => {
-      const el = reg?.element;
-      if (!el) return;
-      el.style.overflow = "visible";
-      el.dataset.label = text; // fallback extra p/ outras rotinas
-
-      let lbl = el.querySelector(".region-label");
-      if (!lbl) {
-        lbl = document.createElement("div");
-        lbl.className = "region-label";
-        // estilos inline para não depender de CSS externo
-        Object.assign(lbl.style, {
-          position: "absolute",
-          top: "4px",
-          left: "6px",
-          zIndex: 5,
-          padding: "2px 8px",
-          fontSize: "11px",
-          lineHeight: "1",
-          color: "#fff",
-          background: "rgba(0,0,0,0.55)",
-          border: "1px solid rgba(255,255,255,0.18)",
-          borderRadius: "8px",
-          pointerEvents: "none",
-          whiteSpace: "nowrap",
-        });
-        el.appendChild(lbl);
-      }
-      lbl.textContent = text || "";
-    };
-    makeLabel(r, item);
-    // =================================
-
-    // seleção visual
-    selectedRegionIdRef.current = r.id;
-    r.addClass?.("region-selected") ?? r.element?.classList?.add("region-selected");
-
-    // sincroniza tabela (re-tentativas rápidas)
-    let n = 0;
-    const bump = () => {
-      setAnnotations(prev => {
-        const idx = prev.findIndex(a => a.regionId === r.id);
-        if (idx === -1) return prev;
-        const clone = prev.slice();
-        clone[idx] = { ...clone[idx], type, item };
-        return clone;
+      const r = regions.addRegion?.({
+        start,
+        end,
+        drag: true,
+        resize: true,
+        data: { type, item },
       });
-      if (n++ < 5) setTimeout(bump, 20);
-    };
-    setTimeout(bump, 0);
-  },
-  [wavesurfer, getRegionsPlugin, setAnnotations]
-);
+      if (!r) return;
 
+      try {
+        if (typeof r.setOptions === "function") {
+          const prev = typeof r.getData === "function" ? (r.getData() || {}) : (r.data || {});
+          r.setOptions({ data: { ...prev, type, item } });
+        } else if (typeof r.setData === "function") {
+          const prev = r.getData?.() || {};
+          r.setData({ ...prev, type, item });
+        } else {
+          r.data = { ...(r.data || {}), type, item };
+        }
+      } catch {}
 
-  /* ====== HOTKEYS ÚNICOS ====== */
-  const { map: objHotMap } = useMemo(
-    () => assignHotkeysUnique(objectDefs),
-    [objectDefs]
+      selectedRegionIdRef.current = r.id;
+      r.addClass?.("region-selected") ?? r.element?.classList?.add("region-selected");
+
+      let n = 0;
+      const bump = () => {
+        setAnnotations(prev => {
+          const idx = prev.findIndex(a => a.regionId === r.id);
+          if (idx === -1) return prev;
+          const clone = prev.slice();
+          clone[idx] = { ...clone[idx], type, item };
+          return clone;
+        });
+        if (n++ < 5) setTimeout(bump, 20);
+      };
+      setTimeout(bump, 0);
+    },
+    [wavesurfer, getRegionsPlugin, setAnnotations]
   );
-  const { map: evHotMap } = useMemo(
-    () => assignHotkeysUnique(eventDefs),
-    [eventDefs]
-  );
 
-  // estruturas para render
-  const objectRows = useMemo(
-    () => objectDefs.map((name) => ({ name, hk: objHotMap.get(name) || "" })),
-    [objectDefs, objHotMap]
-  );
-  const eventRows = useMemo(
-    () => eventDefs.map((name) => ({ name, hk: evHotMap.get(name) || "" })),
-    [eventDefs, evHotMap]
-  );
-
-  // mapa de tecla -> { type, item } (objetos têm prioridade)  
-  const hotkeyMap = useMemo(() => {
-    const m = {};
-    for (const name of objectDefs) {
-      const hk = (objHotMap.get(name) || "").toLowerCase();
-      if (hk) m[hk] = { type: "object", item: name };
-    }
-    for (const name of eventDefs) {
-      const hk = (evHotMap.get(name) || "").toLowerCase();
-      if (hk && !m[hk]) m[hk] = { type: "event", item: name };
-    }
-    return m;
-  }, [objectDefs, eventDefs, objHotMap, evHotMap]);
-
-  // Hotkeys globais para quick-create 
-
+  // Hotkeys: letra = quick create (Objects prioridad; senão Events)
   useEffect(() => {
     const onKey = (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
@@ -633,26 +530,30 @@ const quickCreate = useCallback(
       const key = e.key?.toLowerCase();
       if (!key || key.length !== 1) return;
 
-      const entry = hotkeyMap[key];
-      if (entry) {
+      const obj = objectDefs.find((o) => o?.[0]?.toLowerCase() === key);
+      if (obj) {
         e.preventDefault();
-        quickCreate(entry.type, entry.item);
+        quickCreate("object", obj);
+        return;
+      }
+      const ev = eventDefs.find((x) => x?.[0]?.toLowerCase() === key);
+      if (ev) {
+        e.preventDefault();
+        quickCreate("event", ev);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [hotkeyMap, quickCreate]);
+  }, [objectDefs, eventDefs, quickCreate]);
 
-  // Cor atual (se precisares mais tarde para destacar) 
-  const selectedRow =
-    annotations.find((a) => a.uid === menuState.selectedUid) || null;
+  // Cor atual (se precisares mais tarde para destacar)
+  const selectedRow = annotations.find((a) => a.uid === menuState.selectedUid) || null;
   let colorClass = "";
   if (selectedRow) {
     const r = getRegionById(selectedRow.regionId);
     const el = r?.element;
     if (el?.classList) {
-      colorClass =
-        REGION_COLOR_CLASSES.find((c) => el.classList.contains(c)) || "";
+      colorClass = REGION_COLOR_CLASSES.find((c) => el.classList.contains(c)) || "";
     }
   }
 
@@ -661,6 +562,92 @@ const quickCreate = useCallback(
     event: eventDefs,
     tag: tagDefs,
   };
+
+  /* ===== Files: carregar lista do /public/audio ===== */
+  useEffect(() => {
+    let cancelled = false;
+
+    const normalize = (arr) =>
+      arr
+        .filter(Boolean)
+        .map((x) =>
+          typeof x === "string"
+            ? { name: x.split("/").pop(), url: x.startsWith("/audio/") ? x : `/audio/${x}` }
+            : { name: x.name || x.url?.split("/").pop(), url: x.url || x.path }
+        )
+        .filter((x) => x && x.url);
+
+    async function tryFetchJson(url) {
+      try {
+        const r = await fetch(url, { cache: "no-store" });
+        if (!r.ok) return null;
+        const j = await r.json();
+        const list = Array.isArray(j) ? j : j.files || j.items;
+        return Array.isArray(list) ? normalize(list) : null;
+      } catch {
+        return null;
+      }
+    }
+
+    async function probeNames(names) {
+      const found = [];
+      await Promise.all(
+        names.map(async (n) => {
+          const url = `/audio/${encodeURIComponent(n)}`;
+          try {
+            const r = await fetch(url, { method: "HEAD" });
+            if (r.ok) found.push({ name: n, url });
+          } catch {}
+        })
+      );
+      return found;
+    }
+
+    (async () => {
+      // 1) manifest json (recomendado)
+      const fromManifest =
+        (await tryFetchJson("/audio/manifest.json")) ||
+        (await tryFetchJson("/audio/list.json"));
+      if (!cancelled && fromManifest?.length) {
+        setAudioFiles(fromManifest);
+        return;
+      }
+
+      // 2) fallback: tenta alguns nomes comuns (ajusta se quiseres)
+      const guesses = [
+        "10hz.mp3",
+        "whale.mp3",
+        
+      ];
+      const found = await probeNames(guesses);
+      if (!cancelled) {
+        const list = found.length ? found : [{ name: "10hz.mp3", url: "/audio/10hz.mp3" }];
+        setAudioFiles(list);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handlePickLocalFiles = useCallback((e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const newly = files.map((f) => ({
+      name: `local: ${f.name}`,
+      url: URL.createObjectURL(f),
+      _local: true,
+    }));
+    setAudioFiles((prev) => [...newly, ...prev]);
+    setAudioUrl(newly[0].url);
+    // limpa input para poder escolher o mesmo ficheiro outra vez
+    e.target.value = "";
+  }, []);
+
+  const playFile = useCallback((f) => {
+    setAudioUrl(f.url);
+  }, []);
 
   return (
     <AppRoot>
@@ -692,34 +679,34 @@ const quickCreate = useCallback(
           <Panel>
             <PanelTitle>Objects</PanelTitle>
             <ItemList>
-              {objectRows.map(({ name, hk }) => (
-                <Item key={name} onClick={() => quickCreate("object", name)} title={`Quick create "${name}"`}>
-                  <ItemLabel>{name}</ItemLabel>
+              {objectDefs.map((o) => (
+                <Item key={o} onClick={() => quickCreate("object", o)} title={`Quick create "${o}"`}>
+                  <ItemLabel>{o}</ItemLabel>
                   <KeyBadge
                     type="button"
-                    title={`Quick create "${name}" (tecla "${(hk || "?").toUpperCase()}")`}
-                    onClick={(e) => { e.stopPropagation(); quickCreate("object", name); }}
+                    title={`Quick create "${o}" (tecla "${o[0]?.toUpperCase()}")`}
+                    onClick={(e) => { e.stopPropagation(); quickCreate("object", o); }}
                   >
-                    {(hk || "?").toUpperCase()}
+                    {o[0]?.toUpperCase() || "?"}
                   </KeyBadge>
                 </Item>
               ))}
             </ItemList>
           </Panel>
 
-          {/* EVENTS — também quick create (hotkeys únicos dentro do grupo) */}
+          {/* EVENTS — também quick create */}
           <Panel>
             <PanelTitle>Events</PanelTitle>
             <ItemList>
-              {eventRows.map(({ name, hk }) => (
-                <Item key={name} onClick={() => quickCreate("event", name)} title={`Quick create "${name}"`}>
-                  <ItemLabel>{name}</ItemLabel>
+              {eventDefs.map((ev) => (
+                <Item key={ev} onClick={() => quickCreate("event", ev)} title={`Quick create "${ev}"`}>
+                  <ItemLabel>{ev}</ItemLabel>
                   <KeyBadge
                     type="button"
-                    title={`Quick create "${name}" (tecla "${(hk || "?").toUpperCase()}")`}
-                    onClick={(e) => { e.stopPropagation(); quickCreate("event", name); }}
+                    title={`Quick create "${ev}" (tecla "${ev[0]?.toUpperCase()}")`}
+                    onClick={(e) => { e.stopPropagation(); quickCreate("event", ev); }}
                   >
-                    {(hk || "?").toUpperCase()}
+                    {ev[0]?.toUpperCase() || "?"}
                   </KeyBadge>
                 </Item>
               ))}
@@ -743,7 +730,7 @@ const quickCreate = useCallback(
                 onRegionChange={handleRegionChange}
               />
 
-              {/* Popup da região: só DELETE + selects type/item   */}
+              {/* Popup da região: só DELETE + selects type/item */}
               <RegionMenu
                 visible={menuState.visible}
                 left={menuState.left}
@@ -751,7 +738,7 @@ const quickCreate = useCallback(
                 annotation={selectedRow}
                 colorClass={colorClass}
                 typeOptions={["object", "event", "tag"]}
-                itemsByType={defsByType}
+                itemsByType={{ object: objectDefs, event: eventDefs, tag: tagDefs }}
                 onTypeChange={handleTypeChange}
                 onItemChange={handleItemChange}
                 onDelete={handleMenuDelete}
@@ -811,19 +798,32 @@ const quickCreate = useCallback(
                 </TableWrapper>
               </div>
 
+              {/* FILES */}
               <div style={{ flex: 1, background: "#0f1228", borderRadius: 10, padding: 14 }}>
                 <PanelHeader><PanelTitle>Files</PanelTitle></PanelHeader>
                 <FileList>
-                  <FileItem>
-                    <FileName>sound 8 - 2022-06-05_15_26_AMP.wav</FileName>
-                    <FileActions><SmallBtn title="Play">▶️</SmallBtn><SmallBtn title="Download">⬇️</SmallBtn></FileActions>
-                  </FileItem>
-                  <FileItem>
-                    <FileName>sound 7 - 2022-06-05_15_26_AMP.wav</FileName>
-                    <FileActions><SmallBtn title="Play">▶️</SmallBtn><SmallBtn title="Download">⬇️</SmallBtn></FileActions>
-                  </FileItem>
+                  {audioFiles.map((f, i) => (
+                    <FileItem key={`${f.url}-${i}`}>
+                      <FileName>{f.name || f.url.split("/").pop()}</FileName>
+                      <FileActions>
+                        <SmallBtn title="Play" onClick={() => playFile(f)}>▶️</SmallBtn>
+                        <a href={f.url} download={f.name || ""} style={{ textDecoration: "none" }}>
+                          <SmallBtn as="span" title="Download">⬇️</SmallBtn>
+                        </a>
+                      </FileActions>
+                    </FileItem>
+                  ))}
                 </FileList>
-                <BtnFull>Add File</BtnFull>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="audio/*"
+                  multiple
+                  onChange={handlePickLocalFiles}
+                  style={{ display: "none" }}
+                />
+                <BtnFull onClick={() => fileInputRef.current?.click()}>Add File</BtnFull>
               </div>
             </div>
           </section>

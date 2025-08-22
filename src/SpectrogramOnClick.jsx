@@ -183,13 +183,13 @@ export default function SpectrogramOnClick({
     });
   };
 
-  /* ======================================== */
+  /* ==========================================*/
 
   useEffect(() => {
     const ws = WaveSurfer.create({
       container: waveformRef.current,
       height: 260,
-      waveColor: "#b7bec7",
+      waveColor: "#ffffffff",
       progressColor: "#15839b",
       cursorWidth: 0,
       normalize: true,
@@ -238,11 +238,11 @@ export default function SpectrogramOnClick({
       regionMapRef.current.set(r.id, r);
       paintGreen(r);
 
-      // se vier com item do quick-create, usa-o como base
+      // se vier com item do quick-create, usa-o como base 
       const d = getData(r);
       const base = d.item || d.labelBase || "";
       if (base) {
-        // coloca temporariamente index 1 e renumera todos
+        // coloca temporariamente index 1 e renumera todos    
         setData(r, { ...d, labelBase: base, labelIndex: 1 });
         renumberAll(base);
       } else {
@@ -268,7 +268,7 @@ export default function SpectrogramOnClick({
     });
 
     regions.on("region-removed", (r) => {
-      const base = baseOf(r); // captura antes de remover
+      const base = baseOf(r); // captura antes de remover 
       regionMapRef.current.delete(r.id);
       if (selectedIdRef.current === r.id) selectedIdRef.current = null;
       if (base) renumberAll(base);
