@@ -466,59 +466,98 @@ function AppLayout() {
   }, [annotations, menuState.selectedUid, getRegionById]);
 
   /* ================= QUICK CREATE ================= */
-  const quickCreate = useCallback(
-    (type, item) => {
-      const ws = wavesurfer;
-      const regions = getRegionsPlugin();
-      if (!ws || !regions) return;
+   // QUICK-CREATE (cria região já com type/item e desenha o rótulo imediatamente)
+const quickCreate = useCallback(
+  (type, item) => {
+    const ws = wavesurfer;
+    const regions = getRegionsPlugin();
+    if (!ws || !regions) return;
 
-      const dur = ws.getDuration?.() || 0;
-      if (!dur) return;
+    const dur = ws.getDuration?.() || 0;
+    if (!dur) return;
 
-      const now = ws.getCurrentTime?.() || 0;
-      const start = Math.min(now, Math.max(0, dur - 0.05));
-      const length = Math.min(1.0, Math.max(0.25, dur * 0.03));
-      const end = Math.min(dur, start + length);
+    const now = ws.getCurrentTime?.() || 0;
+    const start = Math.min(now, Math.max(0, dur - 0.05));
+    const length = Math.min(1.0, Math.max(0.25, dur * 0.03));
+    const end = Math.min(dur, start + length);
 
-      const r = regions.addRegion?.({
-        start,
-        end,
-        drag: true,
-        resize: true,
-        data: { type, item },
-      });
-      if (!r) return;
+    // cria já com metadados
+    const r = regions.addRegion?.({
+      start,
+      end,
+      drag: true,
+      resize: true,
+      data: { type, item, label: item },
+    });
+    if (!r) return;
 
-      try {
-        if (typeof r.setOptions === "function") {
-          const prev = typeof r.getData === "function" ? (r.getData() || {}) : (r.data || {});
-          r.setOptions({ data: { ...prev, type, item } });
-        } else if (typeof r.setData === "function") {
-          const prev = r.getData?.() || {};
-          r.setData({ ...prev, type, item });
-        } else {
-          r.data = { ...(r.data || {}), type, item };
-        }
-      } catch {}
+    // garante que os metadados ficam na instância (v6/v7)
+    try {
+      if (typeof r.setOptions === "function") {
+        const prev = typeof r.getData === "function" ? (r.getData() || {}) : (r.data || {});
+        r.setOptions({ data: { ...prev, type, item, label: item } });
+      } else if (typeof r.setData === "function") {
+        const prev = r.getData?.() || {};
+        r.setData({ ...prev, type, item, label: item });
+      } else {
+        r.data = { ...(r.data || {}), type, item, label: item };
+      }
+    } catch {}
 
-      selectedRegionIdRef.current = r.id;
-      r.addClass?.("region-selected") ?? r.element?.classList?.add("region-selected");
+    // ==== rótulo imediato no DOM ====
+    const makeLabel = (reg, text) => {
+      const el = reg?.element;
+      if (!el) return;
+      el.style.overflow = "visible";
+      el.dataset.label = text; // fallback extra p/ outras rotinas
 
-      let n = 0;
-      const bump = () => {
-        setAnnotations(prev => {
-          const idx = prev.findIndex(a => a.regionId === r.id);
-          if (idx === -1) return prev;
-          const clone = prev.slice();
-          clone[idx] = { ...clone[idx], type, item };
-          return clone;
+      let lbl = el.querySelector(".region-label");
+      if (!lbl) {
+        lbl = document.createElement("div");
+        lbl.className = "region-label";
+        // estilos inline para não depender de CSS externo
+        Object.assign(lbl.style, {
+          position: "absolute",
+          top: "4px",
+          left: "6px",
+          zIndex: 5,
+          padding: "2px 8px",
+          fontSize: "11px",
+          lineHeight: "1",
+          color: "#fff",
+          background: "rgba(0,0,0,0.55)",
+          border: "1px solid rgba(255,255,255,0.18)",
+          borderRadius: "8px",
+          pointerEvents: "none",
+          whiteSpace: "nowrap",
         });
-        if (n++ < 5) setTimeout(bump, 20);
-      };
-      setTimeout(bump, 0);
-    },
-    [wavesurfer, getRegionsPlugin, setAnnotations]
-  );
+        el.appendChild(lbl);
+      }
+      lbl.textContent = text || "";
+    };
+    makeLabel(r, item);
+    // =================================
+
+    // seleção visual
+    selectedRegionIdRef.current = r.id;
+    r.addClass?.("region-selected") ?? r.element?.classList?.add("region-selected");
+
+    // sincroniza tabela (re-tentativas rápidas)
+    let n = 0;
+    const bump = () => {
+      setAnnotations(prev => {
+        const idx = prev.findIndex(a => a.regionId === r.id);
+        if (idx === -1) return prev;
+        const clone = prev.slice();
+        clone[idx] = { ...clone[idx], type, item };
+        return clone;
+      });
+            if (n++ < 5) setTimeout(bump, 20);
+    };
+    setTimeout(bump, 0);
+  },
+  [wavesurfer, getRegionsPlugin, setAnnotations]
+);
 
   // Hotkeys: letra = quick create (Objects prioridad; senão Events)
   useEffect(() => {
