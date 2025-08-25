@@ -1,11 +1,12 @@
 // src/App.js
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import styled from "styled-components";
 import SpectrogramOnClick from "./SpectrogramOnClick";
 import PlaybackControls from "./PlaybackControls";
 import SidebarControls from "./SidebarControls";
 import RegionMenu from "./RegionMenu";
 import AddDefinitionModal from "./AddDefinitionModal";
+import InfoModal from "./InfoModal";
 
 /* ================= theme ================= */
 const theme = {
@@ -18,7 +19,7 @@ const theme = {
   primary: "#5c6bc0",
 };
 
-/* ============== constants ============== */
+/* ============== constants ================ */
 const REGION_COLOR_CLASSES = [
   "region-green",
   "region-blue",
@@ -161,7 +162,7 @@ export const ViewerBox = styled.div`
   display: flex; flex-direction: column; gap: 12px; box-shadow: inset 0 0 14px rgba(0,0,0,0.5);
 `;
 
-/* tabelas / ficheiros */
+/* tabelas / ficheiros  */
 export const PanelHeader = styled.div`display: flex; justify-content: space-between; align-items: center;`;
 export const PanelMeta = styled.div`font-size: 0.65rem; color: ${theme.muted};`;
 export const TableWrapper = styled.div`overflow: auto; max-height: 160px;`;
@@ -217,14 +218,74 @@ const PlusBtn = styled.button`
 
 /* ============== componente ============== */
 function AppLayout() {
+  // AUDIO: selectable sources
   const [audioUrl, setAudioUrl] = useState("/audio/10hz.mp3");
-  const [audioFiles, setAudioFiles] = useState([]); // {name, url}
+  const [audioFiles, setAudioFiles] = useState([]);
   const fileInputRef = useRef(null);
+  const localUrlsRef = useRef([]);
 
   const [wavesurfer, setWavesurfer] = useState(null);
-
   const [selectionEnabled, setSelectionEnabled] = useState(false);
   const selectedRegionIdRef = useRef(null);
+
+  // Playback rate (1x -> 2x -> 4x)
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const cyclePlaybackRate = useCallback(() => {
+    setPlaybackRate((r) => (r === 1 ? 2 : r === 2 ? 4 : 1));
+  }, []);
+  useEffect(() => {
+    if (wavesurfer?.setPlaybackRate) wavesurfer.setPlaybackRate(playbackRate);
+  }, [wavesurfer, playbackRate]);
+
+  // Mute
+  const [isMuted, setIsMuted] = useState(false);
+  const lastVolumeRef = useRef(1);
+  const applyMute = useCallback(
+    (mute) => {
+      if (!wavesurfer) {
+        setIsMuted(mute);
+        return;
+      }
+      try {
+        if (typeof wavesurfer.setMuted === "function") {
+          wavesurfer.setMuted(mute);
+        } else if (typeof wavesurfer.setVolume === "function") {
+          if (mute) {
+            lastVolumeRef.current = wavesurfer.getVolume
+              ? wavesurfer.getVolume()
+              : lastVolumeRef.current;
+            wavesurfer.setVolume(0);
+          } else {
+            wavesurfer.setVolume(lastVolumeRef.current ?? 1);
+          }
+        } else {
+          const media = wavesurfer.media || wavesurfer.getMediaElement?.();
+          if (media) media.muted = mute;
+        }
+      } catch {}
+      setIsMuted(mute);
+    },
+    [wavesurfer]
+  );
+  const toggleMute = useCallback(() => applyMute(!isMuted), [applyMute, isMuted]);
+  useEffect(() => { applyMute(isMuted); }, [wavesurfer]); // re-aplicar ao trocar de ficheiro/ws
+
+  // +10s
+  const forward10 = useCallback(() => {
+    const ws = wavesurfer;
+    if (!ws) return;
+    const dur = ws.getDuration?.() || 0;
+    const now = ws.getCurrentTime?.() || 0;
+    const t = Math.min(dur, now + 10);
+    if (typeof ws.setTime === "function") ws.setTime(t);
+    else if (typeof ws.seekTo === "function") {
+      const ratio = dur ? Math.min(0.999, t / dur) : 0;
+      ws.seekTo(ratio);
+    }
+  }, [wavesurfer]);
+
+  // Info modal
+  const [infoOpen, setInfoOpen] = useState(false);
 
   const idMapRef = useRef(new Map()); // region.id -> uid
   const [nextUid, setNextUid] = useState(1);
@@ -237,7 +298,7 @@ function AppLayout() {
     selectedUid: null,
   });
 
-  // DEFINITIONS + modal
+  // DEFINITIONS + modal 
   const [objectDefs, setObjectDefs] = useState(["dolphin", "whale", "seal", "turtle"]);
   const [eventDefs, setEventDefs] = useState(["noise", "nothing"]);
   const [tagDefs, setTagDefs] = useState(["lorem", "ipsum", "dolor", "uter"]);
@@ -251,12 +312,62 @@ function AppLayout() {
     setDefModalOpen(false);
   }, []);
 
-  const viewerBoxRef = useRef(null);
+  // AUDIO: load manifest OR fallback
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      let files = [];
+      try {
+        const res = await fetch("/audio/index.json", { cache: "no-store" });
+        if (res.ok) {
+          const arr = await res.json();
+          files = (arr || [])
+            .filter((x) => typeof x === "string")
+            .map((name) => ({ name, path: `/audio/${name}` }));
+        }
+      } catch {/* ignore */}
+      if (!files.length) {
+        const fallbackNames = ["10hz.mp3", "whale.mp3"];
+        files = fallbackNames.map((name) => ({ name, path: `/audio/${name}` }));
+      }
+      if (!cancelled) {
+        setAudioFiles(files);
+        if (files.length && !files.some((f) => f.path === audioUrl)) {
+          setAudioUrl(files[0].path);
+        }
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []); // once
 
-  const handleToggleSelection = useCallback(() => {
-    setSelectionEnabled((v) => !v);
+  // revoke local blob urls on unmount 
+  useEffect(() => {
+    return () => {
+      localUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
+      localUrlsRef.current = [];
+    };
   }, []);
 
+  const handlePickLocalFile = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleLocalFileChosen = useCallback((e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const additions = files.map((f) => {
+      const url = URL.createObjectURL(f);
+      localUrlsRef.current.push(url);
+      return { name: f.name, path: url, isLocal: true };
+    });
+    setAudioFiles((prev) => [...additions, ...prev]);
+    setAudioUrl(additions[0].path);
+    e.target.value = "";
+  }, []);
+
+  const viewerBoxRef = useRef(null);
+  const handleToggleSelection = useCallback(() => setSelectionEnabled((v) => !v), []);
   const handleReady = useCallback((ws) => setWavesurfer(ws), []);
 
   // Plugin accessor (robusto)
@@ -277,7 +388,7 @@ function AppLayout() {
     return null;
   }, [wavesurfer]);
 
-  // encontrar Region por id
+  // encontrar Region por id 
   const getRegionById = useCallback(
     (rid) => {
       const regions = getRegionsPlugin();
@@ -303,6 +414,26 @@ function AppLayout() {
     [getRegionsPlugin]
   );
 
+  // ======= conflict-free hotkeys (per list) =======
+  const buildHotkeyMap = useCallback((list) => {
+    const used = new Set();
+    const map = {};
+    list.forEach((name) => {
+      const letters = String(name).toLowerCase().replace(/[^a-z]/g, "");
+      let chosen = null;
+      for (let i = 0; i < letters.length; i += 1) {
+        const ch = letters[i];
+        if (!used.has(ch)) { chosen = ch; break; }
+      }
+      if (!chosen && letters.length) chosen = letters[0];
+      if (chosen) used.add(chosen);
+      map[name] = chosen || null;
+    });
+    return map;
+  }, []);
+  const objectHotkeys = useMemo(() => buildHotkeyMap(objectDefs), [buildHotkeyMap, objectDefs]);
+  const eventHotkeys  = useMemo(() => buildHotkeyMap(eventDefs),  [buildHotkeyMap, eventDefs]);
+
   // eventos das regions
   const handleRegionChange = useCallback(
     (evt) => {
@@ -322,6 +453,9 @@ function AppLayout() {
 
       const lowHz = region?.data?.metrics?.lowHz ?? 0;
       const highHz = region?.data?.metrics?.highHz ?? 0;
+      const rType = region?.data?.type || "object";
+      const rItem = region?.data?.item || "";
+      const rLabel = region?.data?.label || rItem || "";
 
       setAnnotations((prev) => {
         const idx = prev.findIndex((a) => a.regionId === rid);
@@ -332,8 +466,9 @@ function AppLayout() {
           end: region.end,
           lowHz,
           highHz,
-          type: idx >= 0 ? prev[idx].type : (region?.data?.type || "object"),
-          item: idx >= 0 ? prev[idx].item : (region?.data?.item || ""),
+          type: idx >= 0 ? prev[idx].type : rType,
+          item: idx >= 0 ? prev[idx].item : rItem,
+          label: idx >= 0 ? prev[idx].label : rLabel,
           className: idx >= 0 ? prev[idx].className : "",
         };
 
@@ -391,7 +526,7 @@ function AppLayout() {
     [getRegionById]
   );
 
-  // focar/centrar por annotation (usado no botão Seek da tabela)
+  // focar/centrar por annotation (usado no botão Seek da tabela) 
   const seekAnnotation = useCallback(
     (uid) => {
       if (!wavesurfer) return;
@@ -405,7 +540,7 @@ function AppLayout() {
     [annotations, wavesurfer, getRegionById]
   );
 
-  // abrir popup “editar” (botão Editar da tabela)
+  // abrir popup “editar” (botão Editar da tabela) 
   const openMenuForUid = useCallback(
     (uid) => {
       const row = annotations.find((a) => a.uid === uid);
@@ -429,18 +564,24 @@ function AppLayout() {
     [annotations, wavesurfer, getRegionById]
   );
 
-  // RegionMenu: alterar TYPE/ITEM na annotation
+  // RegionMenu: alterar TYPE/ITEM (+ label) na annotation 
   const handleTypeChange = useCallback(
     (newType) => {
       setAnnotations((prev) => {
         const idx = prev.findIndex((a) => a.uid === menuState.selectedUid);
         if (idx === -1) return prev;
         const clone = prev.slice();
-        clone[idx] = { ...clone[idx], type: newType, item: "" };
+        clone[idx] = { ...clone[idx], type: newType, item: "", label: "" };
+        const r = getRegionById(clone[idx].regionId);
+        if (r) {
+          const d = r.getData?.() || r.data || {};
+          const next = { ...d, type: newType, item: "", label: "" };
+          if (r.setData) r.setData(next); else r.data = next;
+        }
         return clone;
       });
     },
-    [menuState.selectedUid]
+    [menuState.selectedUid, getRegionById]
   );
 
   const handleItemChange = useCallback(
@@ -449,14 +590,20 @@ function AppLayout() {
         const idx = prev.findIndex((a) => a.uid === menuState.selectedUid);
         if (idx === -1) return prev;
         const clone = prev.slice();
-        clone[idx] = { ...clone[idx], item: newItem };
+        clone[idx] = { ...clone[idx], item: newItem, label: newItem };
+        const r = getRegionById(clone[idx].regionId);
+        if (r) {
+          const d = r.getData?.() || r.data || {};
+          const next = { ...d, item: newItem, label: newItem };
+          if (r.setData) r.setData(next); else r.data = next;
+        }
         return clone;
       });
     },
-    [menuState.selectedUid]
+    [menuState.selectedUid, getRegionById]
   );
 
-  // RegionMenu: DELETE — apaga no WaveSurfer e fecha popup
+  // RegionMenu: DELETE — apaga no WaveSurfer e fecha popup 
   const handleMenuDelete = useCallback(() => {
     const row = annotations.find((a) => a.uid === menuState.selectedUid);
     if (!row) return;
@@ -466,126 +613,96 @@ function AppLayout() {
   }, [annotations, menuState.selectedUid, getRegionById]);
 
   /* ================= QUICK CREATE ================= */
-   // QUICK-CREATE (cria região já com type/item e desenha o rótulo imediatamente)
-const quickCreate = useCallback(
-  (type, item) => {
-    const ws = wavesurfer;
-    const regions = getRegionsPlugin();
-    if (!ws || !regions) return;
+  const nextLabelFor = useCallback(
+    (type, item) => {
+      const count = annotations.filter(a => a.type === type && (a.item || a.label) === item).length;
+      return count > 0 ? `${item} ${count + 1}` : item;
+    },
+    [annotations]
+  );
 
-    const dur = ws.getDuration?.() || 0;
-    if (!dur) return;
+  const quickCreate = useCallback(
+    (type, item) => {
+      const ws = wavesurfer;
+      const regions = getRegionsPlugin();
+      if (!ws || !regions) return;
 
-    const now = ws.getCurrentTime?.() || 0;
-    const start = Math.min(now, Math.max(0, dur - 0.05));
-    const length = Math.min(1.0, Math.max(0.25, dur * 0.03));
-    const end = Math.min(dur, start + length);
+      const dur = ws.getDuration?.() || 0;
+      if (!dur) return;
 
-    // cria já com metadados
-    const r = regions.addRegion?.({
-      start,
-      end,
-      drag: true,
-      resize: true,
-      data: { type, item, label: item },
-    });
-    if (!r) return;
+      const now = ws.getCurrentTime?.() || 0;
+      const start = Math.min(now, Math.max(0, dur - 0.05));
+      const length = Math.min(1.0, Math.max(0.25, dur * 0.03));
+      const end = Math.min(dur, start + length);
+      const label = nextLabelFor(type, item);
 
-    // garante que os metadados ficam na instância (v6/v7)
-    try {
-      if (typeof r.setOptions === "function") {
-        const prev = typeof r.getData === "function" ? (r.getData() || {}) : (r.data || {});
-        r.setOptions({ data: { ...prev, type, item, label: item } });
-      } else if (typeof r.setData === "function") {
-        const prev = r.getData?.() || {};
-        r.setData({ ...prev, type, item, label: item });
-      } else {
-        r.data = { ...(r.data || {}), type, item, label: item };
-      }
-    } catch {}
-
-    // ==== rótulo imediato no DOM ====
-    const makeLabel = (reg, text) => {
-      const el = reg?.element;
-      if (!el) return;
-      el.style.overflow = "visible";
-      el.dataset.label = text; // fallback extra p/ outras rotinas
-
-      let lbl = el.querySelector(".region-label");
-      if (!lbl) {
-        lbl = document.createElement("div");
-        lbl.className = "region-label";
-        // estilos inline para não depender de CSS externo
-        Object.assign(lbl.style, {
-          position: "absolute",
-          top: "4px",
-          left: "6px",
-          zIndex: 5,
-          padding: "2px 8px",
-          fontSize: "11px",
-          lineHeight: "1",
-          color: "#fff",
-          background: "rgba(0,0,0,0.55)",
-          border: "1px solid rgba(255,255,255,0.18)",
-          borderRadius: "8px",
-          pointerEvents: "none",
-          whiteSpace: "nowrap",
-        });
-        el.appendChild(lbl);
-      }
-      lbl.textContent = text || "";
-    };
-    makeLabel(r, item);
-    // =================================
-
-    // seleção visual
-    selectedRegionIdRef.current = r.id;
-    r.addClass?.("region-selected") ?? r.element?.classList?.add("region-selected");
-
-    // sincroniza tabela (re-tentativas rápidas)
-    let n = 0;
-    const bump = () => {
-      setAnnotations(prev => {
-        const idx = prev.findIndex(a => a.regionId === r.id);
-        if (idx === -1) return prev;
-        const clone = prev.slice();
-        clone[idx] = { ...clone[idx], type, item };
-        return clone;
+      const r = regions.addRegion?.({
+        start,
+        end,
+        drag: true,
+        resize: true,
+        data: { type, item, label },
       });
-            if (n++ < 5) setTimeout(bump, 20);
-    };
-    setTimeout(bump, 0);
-  },
-  [wavesurfer, getRegionsPlugin, setAnnotations]
-);
+      if (!r) return;
 
-  // Hotkeys: letra = quick create (Objects prioridad; senão Events)
+      try {
+        if (typeof r.setOptions === "function") {
+          const prev = typeof r.getData === "function" ? (r.getData() || {}) : (r.data || {});
+          r.setOptions({ data: { ...prev, type, item, label } });
+        } else if (typeof r.setData === "function") {
+          const prev = r.getData?.() || {};
+          r.setData({ ...prev, type, item, label });
+        } else {
+          r.data = { ...(r.data || {}), type, item, label };
+        }
+      } catch {}
+
+      selectedRegionIdRef.current = r.id;
+      r.addClass?.("region-selected") ?? r.element?.classList?.add("region-selected");
+
+      let n = 0;
+      const bump = () => {
+        setAnnotations(prev => {
+          const idx = prev.findIndex(a => a.regionId === r.id);
+          if (idx === -1) return prev;
+          const clone = prev.slice();
+          clone[idx] = { ...clone[idx], type, item, label };
+          return clone;
+        });
+        if (n++ < 5) setTimeout(bump, 20);
+      };
+      setTimeout(bump, 0);
+    },
+    [wavesurfer, getRegionsPlugin, nextLabelFor]
+  );
+
+  // Global hotkeys based on conflict-free maps
   useEffect(() => {
+    const letterToAction = {};
+    Object.entries(objectHotkeys).forEach(([name, ch]) => {
+      if (ch) letterToAction[ch] = { type: "object", item: name };
+    });
+    Object.entries(eventHotkeys).forEach(([name, ch]) => {
+      if (ch && !letterToAction[ch]) letterToAction[ch] = { type: "event", item: name };
+    });
+
     const onKey = (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
       const t = e.target;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-
       const key = e.key?.toLowerCase();
       if (!key || key.length !== 1) return;
-
-      const obj = objectDefs.find((o) => o?.[0]?.toLowerCase() === key);
-      if (obj) {
+      const action = letterToAction[key];
+      if (action) {
         e.preventDefault();
-        quickCreate("object", obj);
-        return;
-      }
-      const ev = eventDefs.find((x) => x?.[0]?.toLowerCase() === key);
-      if (ev) {
-        e.preventDefault();
-        quickCreate("event", ev);
+        quickCreate(action.type, action.item);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [objectDefs, eventDefs, quickCreate]);
+  }, [objectHotkeys, eventHotkeys, quickCreate]);
 
-  // Cor atual (se precisares mais tarde para destacar)
+  // Cor atual
   const selectedRow = annotations.find((a) => a.uid === menuState.selectedUid) || null;
   let colorClass = "";
   if (selectedRow) {
@@ -596,97 +713,7 @@ const quickCreate = useCallback(
     }
   }
 
-  const defsByType = {
-    object: objectDefs,
-    event: eventDefs,
-    tag: tagDefs,
-  };
-
-  /* ===== Files: carregar lista do /public/audio ===== */
-  useEffect(() => {
-    let cancelled = false;
-
-    const normalize = (arr) =>
-      arr
-        .filter(Boolean)
-        .map((x) =>
-          typeof x === "string"
-            ? { name: x.split("/").pop(), url: x.startsWith("/audio/") ? x : `/audio/${x}` }
-            : { name: x.name || x.url?.split("/").pop(), url: x.url || x.path }
-        )
-        .filter((x) => x && x.url);
-
-    async function tryFetchJson(url) {
-      try {
-        const r = await fetch(url, { cache: "no-store" });
-        if (!r.ok) return null;
-        const j = await r.json();
-        const list = Array.isArray(j) ? j : j.files || j.items;
-        return Array.isArray(list) ? normalize(list) : null;
-      } catch {
-        return null;
-      }
-    }
-
-    async function probeNames(names) {
-      const found = [];
-      await Promise.all(
-        names.map(async (n) => {
-          const url = `/audio/${encodeURIComponent(n)}`;
-          try {
-            const r = await fetch(url, { method: "HEAD" });
-            if (r.ok) found.push({ name: n, url });
-          } catch {}
-        })
-      );
-      return found;
-    }
-
-    (async () => {
-      // 1) manifest json (recomendado)
-      const fromManifest =
-        (await tryFetchJson("/audio/manifest.json")) ||
-        (await tryFetchJson("/audio/list.json"));
-      if (!cancelled && fromManifest?.length) {
-        setAudioFiles(fromManifest);
-        return;
-      }
-
-      // 2) fallback: tenta alguns nomes comuns (ajusta se quiseres)
-      const guesses = [
-        "10hz.mp3",
-        "whale.mp3",
-        
-      ];
-      const found = await probeNames(guesses);
-      if (!cancelled) {
-        const list = found.length ? found : [{ name: "10hz.mp3", url: "/audio/10hz.mp3" }];
-        setAudioFiles(list);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const handlePickLocalFiles = useCallback((e) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-    const newly = files.map((f) => ({
-      name: `local: ${f.name}`,
-      url: URL.createObjectURL(f),
-      _local: true,
-    }));
-    setAudioFiles((prev) => [...newly, ...prev]);
-    setAudioUrl(newly[0].url);
-    // limpa input para poder escolher o mesmo ficheiro outra vez
-    e.target.value = "";
-  }, []);
-
-  const playFile = useCallback((f) => {
-    setAudioUrl(f.url);
-  }, []);
+  const defsByType = { object: objectDefs, event: eventDefs, tag: tagDefs };
 
   return (
     <AppRoot>
@@ -705,6 +732,13 @@ const quickCreate = useCallback(
             onToggleSelection={handleToggleSelection}
             onDeleteSelected={handleDeleteSelected}
             onColorSelected={handleColorSelected}
+            // novos
+            onInfoClick={() => setInfoOpen(true)}
+            playbackRate={playbackRate}
+            onCycleSpeed={cyclePlaybackRate}
+            isMuted={isMuted}
+            onToggleMute={toggleMute}
+            onForward10={forward10}
           />
         </LeftControls>
 
@@ -714,41 +748,45 @@ const quickCreate = useCallback(
             <PlusBtn type="button" title="Add definition" onClick={() => setDefModalOpen(true)}>+</PlusBtn>
           </DefinitionsHeader>
 
-          {/* OBJECTS — Item e badge fazem quick create */}
           <Panel>
             <PanelTitle>Objects</PanelTitle>
             <ItemList>
-              {objectDefs.map((o) => (
-                <Item key={o} onClick={() => quickCreate("object", o)} title={`Quick create "${o}"`}>
-                  <ItemLabel>{o}</ItemLabel>
-                  <KeyBadge
-                    type="button"
-                    title={`Quick create "${o}" (tecla "${o[0]?.toUpperCase()}")`}
-                    onClick={(e) => { e.stopPropagation(); quickCreate("object", o); }}
-                  >
-                    {o[0]?.toUpperCase() || "?"}
-                  </KeyBadge>
-                </Item>
-              ))}
+              {objectDefs.map((o) => {
+                const hk = objectHotkeys[o] || o[0]?.toLowerCase() || "";
+                return (
+                  <Item key={o} onClick={() => quickCreate("object", o)} title={`Quick create "${o}"`}>
+                    <ItemLabel>{o}</ItemLabel>
+                    <KeyBadge
+                      type="button"
+                      title={`Quick create "${o}" (tecla "${(hk || "?").toUpperCase()}")`}
+                      onClick={(e) => { e.stopPropagation(); quickCreate("object", o); }}
+                    >
+                      {(hk || "?").toUpperCase()}
+                    </KeyBadge>
+                  </Item>
+                );
+              })}
             </ItemList>
           </Panel>
 
-          {/* EVENTS — também quick create */}
           <Panel>
             <PanelTitle>Events</PanelTitle>
             <ItemList>
-              {eventDefs.map((ev) => (
-                <Item key={ev} onClick={() => quickCreate("event", ev)} title={`Quick create "${ev}"`}>
-                  <ItemLabel>{ev}</ItemLabel>
-                  <KeyBadge
-                    type="button"
-                    title={`Quick create "${ev}" (tecla "${ev[0]?.toUpperCase()}")`}
-                    onClick={(e) => { e.stopPropagation(); quickCreate("event", ev); }}
-                  >
-                    {ev[0]?.toUpperCase() || "?"}
-                  </KeyBadge>
-                </Item>
-              ))}
+              {eventDefs.map((ev) => {
+                const hk = eventHotkeys[ev] || ev[0]?.toLowerCase() || "";
+                return (
+                  <Item key={ev} onClick={() => quickCreate("event", ev)} title={`Quick create "${ev}"`}>
+                    <ItemLabel>{ev}</ItemLabel>
+                    <KeyBadge
+                      type="button"
+                      title={`Quick create "${ev}" (tecla "${(hk || "?").toUpperCase()}")`}
+                      onClick={(e) => { e.stopPropagation(); quickCreate("event", ev); }}
+                    >
+                      {(hk || "?").toUpperCase()}
+                    </KeyBadge>
+                  </Item>
+                );
+              })}
             </ItemList>
           </Panel>
 
@@ -769,7 +807,6 @@ const quickCreate = useCallback(
                 onRegionChange={handleRegionChange}
               />
 
-              {/* Popup da região: só DELETE + selects type/item */}
               <RegionMenu
                 visible={menuState.visible}
                 left={menuState.left}
@@ -777,7 +814,7 @@ const quickCreate = useCallback(
                 annotation={selectedRow}
                 colorClass={colorClass}
                 typeOptions={["object", "event", "tag"]}
-                itemsByType={{ object: objectDefs, event: eventDefs, tag: tagDefs }}
+                itemsByType={defsByType}
                 onTypeChange={handleTypeChange}
                 onItemChange={handleItemChange}
                 onDelete={handleMenuDelete}
@@ -820,7 +857,7 @@ const quickCreate = useCallback(
                           <Td>{Math.round(a.highHz)}</Td>
                           <Td>{Math.round(a.lowHz)}</Td>
                           <Td>{a.type || "-"}</Td>
-                          <Td>{a.item || a.className || "-"}</Td>
+                          <Td>{a.item || a.label || a.className || "-"}</Td>
                           <Td style={{ whiteSpace: "nowrap" }}>
                             <LinkBtn type="button" onClick={() => openMenuForUid(a.uid)}>
                               Editar
@@ -837,32 +874,35 @@ const quickCreate = useCallback(
                 </TableWrapper>
               </div>
 
-              {/* FILES */}
               <div style={{ flex: 1, background: "#0f1228", borderRadius: 10, padding: 14 }}>
                 <PanelHeader><PanelTitle>Files</PanelTitle></PanelHeader>
-                <FileList>
-                  {audioFiles.map((f, i) => (
-                    <FileItem key={`${f.url}-${i}`}>
-                      <FileName>{f.name || f.url.split("/").pop()}</FileName>
-                      <FileActions>
-                        <SmallBtn title="Play" onClick={() => playFile(f)}>▶️</SmallBtn>
-                        <a href={f.url} download={f.name || ""} style={{ textDecoration: "none" }}>
-                          <SmallBtn as="span" title="Download">⬇️</SmallBtn>
-                        </a>
-                      </FileActions>
-                    </FileItem>
-                  ))}
-                </FileList>
 
                 <input
                   ref={fileInputRef}
                   type="file"
                   accept="audio/*"
                   multiple
-                  onChange={handlePickLocalFiles}
+                  onChange={handleLocalFileChosen}
                   style={{ display: "none" }}
                 />
-                <BtnFull onClick={() => fileInputRef.current?.click()}>Add File</BtnFull>
+
+                <FileList>
+                  {audioFiles.map((f) => (
+                    <FileItem
+                      key={f.path}
+                      style={f.path === audioUrl ? { outline: "2px solid #5c6bc0" } : undefined}
+                    >
+                      <FileName>{f.name}</FileName>
+                      <FileActions>
+                        <SmallBtn title="Play" onClick={() => setAudioUrl(f.path)}>▶️</SmallBtn>
+                        <a href={f.path} download={f.name} style={{ textDecoration: "none" }}>
+                          <SmallBtn as="span" title="Download">⬇️</SmallBtn>
+                        </a>
+                      </FileActions>
+                    </FileItem>
+                  ))}
+                </FileList>
+                <BtnFull onClick={handlePickLocalFile}>Add File</BtnFull>
               </div>
             </div>
           </section>
@@ -875,6 +915,8 @@ const quickCreate = useCallback(
         onSubmit={handleAddDefinition}
         initialType="object"
       />
+
+      <InfoModal open={infoOpen} onClose={() => setInfoOpen(false)} />
     </AppRoot>
   );
 }
