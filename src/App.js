@@ -158,6 +158,8 @@ export const Badge = styled.div`
   background: rgba(255,255,255,0.07); padding: 6px 12px; border-radius: 8px; font-size: 0.65rem;
 `;
 export const ViewerBox = styled.div`
+  position: relative;      /* importante pro popup */
+  overflow: visible;       /* não cortar o popup   */
   flex: 1; background: ${theme.card}; border-radius: 14px; padding: 16px;
   display: flex; flex-direction: column; gap: 12px; box-shadow: inset 0 0 14px rgba(0,0,0,0.5);
 `;
@@ -206,7 +208,12 @@ export const ProgressFill = styled.div`
 `;
 export const Time = styled.div`font-size: 0.75rem; color: #888; text-align: center; margin-top: 4px;`;
 
-/* ===== barra de ZOOM ===== */
+/* ===== compat c/ PlaybackControls antigo ===== */
+export const ScrollBarContainer = ProgressOuter;
+export const ScrollBar = ProgressOuter;
+export const ScrollThumb = ProgressFill;
+
+/* ===== barra de ZOOM (se precisares mostrar) ===== */
 const ZoomRow = styled.div`
   display:flex; align-items:center; gap:10px; padding: 2px 0 6px;
 `;
@@ -251,7 +258,7 @@ function AppLayout() {
   const [currentTime, setCurrentTime] = useState(0);
 
   // ---- ZOOM (px/s) ----
-  const [zoom, setZoom] = useState(80); // tem de coincidir com o inicial do SpectrogramOnClick
+  const [zoom, setZoom] = useState(80); // deve bater com o do SpectrogramOnClick
   useEffect(() => {
     const ws = wavesurfer;
     if (!ws) return;
@@ -470,7 +477,7 @@ function AppLayout() {
   // eventos das regions
   const handleRegionChange = useCallback(
     (evt) => {
-      const { type, region } = evt;
+      const { type, region, menuPos } = evt;
       const rid = region.id;
 
       if (type === "selected") selectedRegionIdRef.current = rid;
@@ -517,16 +524,21 @@ function AppLayout() {
         return clone;
       });
 
-      if (type === "selected") {
-        const r = getRegionById(rid);
-        const boxRect = viewerBoxRef.current?.getBoundingClientRect();
-        const elRect = r?.element?.getBoundingClientRect();
-        const left =
-          boxRect && elRect
-            ? Math.max(8, Math.min(elRect.left - boxRect.left, boxRect.width - 260))
-            : 16;
-        const top =
-          boxRect && elRect ? Math.max(8, elRect.top - boxRect.top - 56) : 12;
+      // abrir popup também ao criar; usar menuPos do filho se existir
+      if (type === "selected" || type === "created") {
+        let left = 16, top = 8;
+        if (menuPos && typeof menuPos.left === "number" && typeof menuPos.top === "number") {
+          left = menuPos.left; top = menuPos.top;
+        } else {
+          const r = getRegionById(rid);
+          const boxRect = viewerBoxRef.current?.getBoundingClientRect();
+          const elRect = r?.element?.getBoundingClientRect();
+          left =
+            boxRect && elRect
+              ? Math.max(8, Math.min(elRect.left - boxRect.left, boxRect.width - 260))
+              : 16;
+          top = 8;
+        }
         setMenuState({ visible: true, left, top, selectedUid: uid });
       }
 
@@ -583,14 +595,14 @@ function AppLayout() {
 
       selectedRegionIdRef.current = row.regionId;
 
+      // posição segura
       const boxRect = viewerBoxRef.current?.getBoundingClientRect?.();
       const elRect = r.element?.getBoundingClientRect?.();
       const left =
         boxRect && elRect
           ? Math.max(8, Math.min(elRect.left - boxRect.left, boxRect.width - 260))
           : 16;
-      const top =
-        boxRect && elRect ? Math.max(8, elRect.top - boxRect.top - 56) : 12;
+      const top = 8;
 
       setMenuState({ visible: true, left, top, selectedUid: uid });
     },
@@ -896,7 +908,7 @@ function AppLayout() {
                 onRegionChange={handleRegionChange}
               />
 
-              {/* ZOOM */}
+              {/* ZOOM (mantido, não destrói nada) */}
               <ZoomRow>
                 <ZoomBtn onClick={() => setZoom((z) => Math.max(20, z - 20))} title="Zoom out">−</ZoomBtn>
                 <ZoomRange
@@ -923,6 +935,21 @@ function AppLayout() {
                   onDislike={() => console.log("Disliked")}
                 />
               </Playback>
+
+              {/* Popup de edição da região */}
+              <RegionMenu
+                visible={menuState.visible}
+                left={menuState.left}
+                top={menuState.top}
+                annotation={annotations.find((a) => a.uid === menuState.selectedUid) || null}
+                colorClass={colorClass}
+                typeOptions={["object", "event", "tag"]}
+                itemsByType={{ object: objectDefs, event: eventDefs, tag: tagDefs }}
+                onTypeChange={handleTypeChange}
+                onItemChange={handleItemChange}
+                onDelete={handleMenuDelete}
+                onClose={() => setMenuState((m) => ({ ...m, visible: false }))}
+              />
             </ViewerBox>
           </Viewer>
 
