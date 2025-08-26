@@ -194,14 +194,32 @@ export const Playback = styled.div`
   display: flex; justify-content: center; align-items: center; gap: 14px;
   padding-top: 8px; border-top: 1px solid ${theme.border}; flex-wrap: wrap;
 `;
-export const ScrollBarContainer = styled.div`width: 100%; height: 8px;`;
-export const ScrollBar = styled.div`
-  width: 100%; height: 10px; background: #e0e0e0; border-radius: 2px; position: relative;
+
+/* ===== barra de progresso ===== */
+export const ProgressOuter = styled.div`
+  width: 100%; height: 8px; border-radius: 4px; background: #1a1d30; position: relative;
+  border: 1px solid ${theme.border}; cursor: pointer;
 `;
-export const ScrollThumb = styled.div`
-  position: absolute; height: 100%; width: 10%; left: 0; background: #4b0556ff; border-radius: 2px;
+export const ProgressFill = styled.div`
+  position: absolute; left: 0; top: 0; bottom: 0; width: 0%;
+  background: #6b1c78; border-radius: 4px;
 `;
-export const Time = styled.div`font-size: 0.75rem; color: #666; text-align: center;`;
+export const Time = styled.div`font-size: 0.75rem; color: #888; text-align: center; margin-top: 4px;`;
+
+/* ===== barra de ZOOM ===== */
+const ZoomRow = styled.div`
+  display:flex; align-items:center; gap:10px; padding: 2px 0 6px;
+`;
+const ZoomBtn = styled.button`
+  width: 28px; height: 28px; border-radius: 8px; border:1px solid ${theme.border};
+  background:#1d2142; color:#e3e8ff; cursor:pointer;
+  &:hover{ background:#242a55; }
+`;
+const ZoomRange = styled.input`
+  flex:1; appearance:none; height:6px; border-radius: 6px; background:#101325; outline:none;
+  &::-webkit-slider-thumb{ appearance:none; width:16px; height:16px; border-radius:50%;
+    background:#5c6bc0; border:1px solid ${theme.border}; cursor:pointer; }
+`;
 
 /* header Definitions (com +) */
 const DefinitionsHeader = styled.div`
@@ -227,6 +245,21 @@ function AppLayout() {
   const [wavesurfer, setWavesurfer] = useState(null);
   const [selectionEnabled, setSelectionEnabled] = useState(false);
   const selectedRegionIdRef = useRef(null);
+
+  // ---- tempo/progresso ----
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+
+  // ---- ZOOM (px/s) ----
+  const [zoom, setZoom] = useState(80); // tem de coincidir com o inicial do SpectrogramOnClick
+  useEffect(() => {
+    const ws = wavesurfer;
+    if (!ws) return;
+    try {
+      if (typeof ws.zoom === "function") ws.zoom(zoom);
+      else if (typeof ws.setOptions === "function") ws.setOptions({ minPxPerSec: zoom });
+    } catch {}
+  }, [zoom, wavesurfer]);
 
   // Playback rate (1x -> 2x -> 4x)
   const [playbackRate, setPlaybackRate] = useState(1);
@@ -268,7 +301,7 @@ function AppLayout() {
     [wavesurfer]
   );
   const toggleMute = useCallback(() => applyMute(!isMuted), [applyMute, isMuted]);
-  useEffect(() => { applyMute(isMuted); }, [wavesurfer]); // re-aplicar ao trocar de ficheiro/ws
+  useEffect(() => { applyMute(isMuted); }, [wavesurfer]);
 
   // +10s
   const forward10 = useCallback(() => {
@@ -298,7 +331,7 @@ function AppLayout() {
     selectedUid: null,
   });
 
-  // DEFINITIONS + modal 
+  // DEFINITIONS + modal
   const [objectDefs, setObjectDefs] = useState(["dolphin", "whale", "seal", "turtle"]);
   const [eventDefs, setEventDefs] = useState(["noise", "nothing"]);
   const [tagDefs, setTagDefs] = useState(["lorem", "ipsum", "dolor", "uter"]);
@@ -341,7 +374,7 @@ function AppLayout() {
     return () => { cancelled = true; };
   }, []); // once
 
-  // revoke local blob urls on unmount 
+  // revoke local blob urls on unmount
   useEffect(() => {
     return () => {
       localUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
@@ -388,7 +421,7 @@ function AppLayout() {
     return null;
   }, [wavesurfer]);
 
-  // encontrar Region por id 
+  // encontrar Region por id
   const getRegionById = useCallback(
     (rid) => {
       const regions = getRegionsPlugin();
@@ -526,7 +559,7 @@ function AppLayout() {
     [getRegionById]
   );
 
-  // focar/centrar por annotation (usado no botão Seek da tabela) 
+  // focar/centrar por annotation
   const seekAnnotation = useCallback(
     (uid) => {
       if (!wavesurfer) return;
@@ -540,7 +573,7 @@ function AppLayout() {
     [annotations, wavesurfer, getRegionById]
   );
 
-  // abrir popup “editar” (botão Editar da tabela) 
+  // abrir popup “editar”
   const openMenuForUid = useCallback(
     (uid) => {
       const row = annotations.find((a) => a.uid === uid);
@@ -564,7 +597,7 @@ function AppLayout() {
     [annotations, wavesurfer, getRegionById]
   );
 
-  // RegionMenu: alterar TYPE/ITEM (+ label) na annotation 
+  // RegionMenu: TYPE/ITEM
   const handleTypeChange = useCallback(
     (newType) => {
       setAnnotations((prev) => {
@@ -603,12 +636,12 @@ function AppLayout() {
     [menuState.selectedUid, getRegionById]
   );
 
-  // RegionMenu: DELETE — apaga no WaveSurfer e fecha popup 
+  // RegionMenu: DELETE
   const handleMenuDelete = useCallback(() => {
     const row = annotations.find((a) => a.uid === menuState.selectedUid);
     if (!row) return;
     const r = getRegionById(row.regionId);
-    if (r?.remove) r.remove(); // dispara region-removed
+    if (r?.remove) r.remove();
     setMenuState((m) => ({ ...m, visible: false }));
   }, [annotations, menuState.selectedUid, getRegionById]);
 
@@ -676,7 +709,7 @@ function AppLayout() {
     [wavesurfer, getRegionsPlugin, nextLabelFor]
   );
 
-  // Global hotkeys based on conflict-free maps
+  // Global hotkeys
   useEffect(() => {
     const letterToAction = {};
     Object.entries(objectHotkeys).forEach(([name, ch]) => {
@@ -715,6 +748,63 @@ function AppLayout() {
 
   const defsByType = { object: objectDefs, event: eventDefs, tag: tagDefs };
 
+  // ======= ligação tempo/progresso =======
+  const attachWsTimeHandlers = useCallback((ws) => {
+    if (!ws) return () => {};
+    const upDur = () => setDuration(ws.getDuration?.() || 0);
+    const onReady = () => { upDur(); setCurrentTime(ws.getCurrentTime?.() || 0); };
+    const onProcess = () => setCurrentTime(ws.getCurrentTime?.() || 0);
+    const onSeek = (progress) => {
+      const d = ws.getDuration?.() || 0;
+      setCurrentTime(d * (progress ?? 0));
+    };
+    const onFinish = () => setCurrentTime(ws.getDuration?.() || 0);
+
+    try {
+      ws.on("ready", onReady);
+      ws.on("decode", upDur);
+      ws.on("audioprocess", onProcess);
+      ws.on("seek", onSeek);
+      ws.on("finish", onFinish);
+    } catch {}
+
+    upDur();
+    setCurrentTime(ws.getCurrentTime?.() || 0);
+
+    return () => {
+      try {
+        ws.un("ready", onReady);
+        ws.un("decode", upDur);
+        ws.un("audioprocess", onProcess);
+        ws.un("seek", onSeek);
+        ws.un("finish", onFinish);
+      } catch {}
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!wavesurfer) return;
+    const detach = attachWsTimeHandlers(wavesurfer);
+    return detach;
+  }, [wavesurfer, attachWsTimeHandlers, audioUrl]);
+
+  const fmt = (s) => {
+    const total = Math.max(0, Math.floor(s || 0));
+    const m = Math.floor(total / 60);
+    const sec = total % 60;
+    return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  };
+
+  const onProgressClick = useCallback((e) => {
+    if (!wavesurfer || !duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const ratio = Math.max(0, Math.min(1, x / rect.width));
+    wavesurfer.seekTo(ratio);
+  }, [wavesurfer, duration]);
+
+  const progressPct = duration ? Math.max(0, Math.min(1, currentTime / duration)) * 100 : 0;
+
   return (
     <AppRoot>
       <Topbar>
@@ -732,7 +822,6 @@ function AppLayout() {
             onToggleSelection={handleToggleSelection}
             onDeleteSelected={handleDeleteSelected}
             onColorSelected={handleColorSelected}
-            // novos
             onInfoClick={() => setInfoOpen(true)}
             playbackRate={playbackRate}
             onCycleSpeed={cyclePlaybackRate}
@@ -752,7 +841,7 @@ function AppLayout() {
             <PanelTitle>Objects</PanelTitle>
             <ItemList>
               {objectDefs.map((o) => {
-                const hk = objectHotkeys[o] || o[0]?.toLowerCase() || "";
+                const hk = (objectHotkeys[o] || o[0]?.toLowerCase() || "");
                 return (
                   <Item key={o} onClick={() => quickCreate("object", o)} title={`Quick create "${o}"`}>
                     <ItemLabel>{o}</ItemLabel>
@@ -773,7 +862,7 @@ function AppLayout() {
             <PanelTitle>Events</PanelTitle>
             <ItemList>
               {eventDefs.map((ev) => {
-                const hk = eventHotkeys[ev] || ev[0]?.toLowerCase() || "";
+                const hk = (eventHotkeys[ev] || ev[0]?.toLowerCase() || "");
                 return (
                   <Item key={ev} onClick={() => quickCreate("event", ev)} title={`Quick create "${ev}"`}>
                     <ItemLabel>{ev}</ItemLabel>
@@ -807,19 +896,25 @@ function AppLayout() {
                 onRegionChange={handleRegionChange}
               />
 
-              <RegionMenu
-                visible={menuState.visible}
-                left={menuState.left}
-                top={menuState.top}
-                annotation={selectedRow}
-                colorClass={colorClass}
-                typeOptions={["object", "event", "tag"]}
-                itemsByType={defsByType}
-                onTypeChange={handleTypeChange}
-                onItemChange={handleItemChange}
-                onDelete={handleMenuDelete}
-                onClose={() => setMenuState((m) => ({ ...m, visible: false }))}
-              />
+              {/* ZOOM */}
+              <ZoomRow>
+                <ZoomBtn onClick={() => setZoom((z) => Math.max(20, z - 20))} title="Zoom out">−</ZoomBtn>
+                <ZoomRange
+                  type="range"
+                  min={20}
+                  max={500}
+                  step={10}
+                  value={zoom}
+                  onChange={(e) => setZoom(Number(e.target.value))}
+                />
+                <ZoomBtn onClick={() => setZoom((z) => Math.min(500, z + 20))} title="Zoom in">+</ZoomBtn>
+              </ZoomRow>
+
+              {/* Barra de progresso + tempo */}
+              <ProgressOuter onClick={onProgressClick} title="Click para procurar">
+                <ProgressFill style={{ width: `${progressPct}%` }} />
+              </ProgressOuter>
+              <Time>{fmt(currentTime)} / {fmt(duration)}</Time>
 
               <Playback>
                 <PlaybackControls

@@ -1,136 +1,63 @@
-import React, { useState, useEffect } from 'react';
-import PropTypes from 'prop-types';
-import {
-  ControlBtn,
-  ScrollBarContainer,
-  ScrollBar,
-  ScrollThumb,
-  Time,
-} from './App.js';
+// src/PlaybackControls.jsx
+import React, { useCallback, useMemo } from "react";
+import PropTypes from "prop-types";
+import { ControlBtn } from "./App.js";
 
+export default function PlaybackControls({ wavesurfer, onLike, onDislike }) {
+  const canPlay = !!wavesurfer;
+  const isPlaying = !!wavesurfer?.isPlaying?.();
 
-
-const PlaybackControls = ({ wavesurfer, onLike, onDislike }) => {
-  const [playing, setPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [thumb, setThumb] = useState({ left: 0, width: 100 });
-
-  useEffect(() => {
-  if (!wavesurfer) return;
-
-    const update = () => {
-  
-  if (!wavesurfer.drawer || !wavesurfer.drawer.wrapper) return;
-
-  const t = wavesurfer.getCurrentTime() || 0;
-  const d = wavesurfer.getDuration()   || 1;
-  setCurrentTime(t);
-  setDuration(d);
-
-  const wrapper = wavesurfer.drawer.wrapper;
-  const total   = wrapper.scrollWidth;
-  const view    = wrapper.clientWidth;
-  const left    = wrapper.scrollLeft;
-  setThumb({
-    left:  (left / (total - view)) * 100,
-    width: (view  / total)       * 100,
-  });
-};
-
-    const onReady = update;
-    const onPlay = () => setPlaying(true);
-    const onPause = () => setPlaying(false);
-    const onSeek = update;
-    const onFinish = () => setPlaying(false);
-
-    wavesurfer.on('ready', onReady);
-    wavesurfer.on('play', onPlay);
-    wavesurfer.on('pause', onPause);
-    wavesurfer.on('audioprocess', update);
-    wavesurfer.on('seek', update);
-    wavesurfer.on('finish', onFinish);
-
-    return () => {
-      wavesurfer.un('ready', onReady);
-      wavesurfer.un('play', onPlay);
-      wavesurfer.un('pause', onPause);
-      wavesurfer.un('audioprocess', update);
-      wavesurfer.un('seek', onSeek);
-      wavesurfer.un('finish', onFinish);
-    };
+  const playPause = useCallback(() => {
+    if (!wavesurfer) return;
+    try { wavesurfer.playPause(); } catch {}
   }, [wavesurfer]);
 
-  const togglePlay = () => {
-    wavesurfer && wavesurfer.playPause();
-  };
-  const skip = secs => {
+  const seekRel = useCallback((secs) => {
     if (!wavesurfer) return;
-    const newTime = Math.max(
-      0,
-      Math.min((wavesurfer.getCurrentTime() || 0) + secs, duration)
-    );
-    wavesurfer.seekTo(newTime / duration);
-  };
-  const handleScroll = e => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const ratio = (e.clientX - rect.left) / rect.width;
-    wavesurfer &&
-      (wavesurfer.seekAndCenter
-        ? wavesurfer.seekAndCenter(ratio)
-        : wavesurfer.seekTo(ratio));
-  };
-  const format = secs => {
-    const m = String(Math.floor(secs / 60)).padStart(2, '0');
-    const s = String(Math.floor(secs % 60)).padStart(2, '0');
-    return `${m}:${s}`;
-  };
+    const dur = wavesurfer.getDuration?.() || 0;
+    const now = wavesurfer.getCurrentTime?.() || 0;
+    const t = Math.max(0, Math.min(dur, now + secs));
+    if (typeof wavesurfer.setTime === "function") wavesurfer.setTime(t);
+    else if (typeof wavesurfer.seekTo === "function") wavesurfer.seekTo(dur ? t / dur : 0);
+  }, [wavesurfer]);
+
+  const icons = useMemo(() => ({
+    prev: "/img/previous1.png",
+    play: "/img/play1.png",
+    pause: "/img/pause1.png",
+    next: "/img/next-button1.png",
+    like: "/img/like1.png",
+    dislike: "/img/dislike1.png",
+  }), []);
 
   return (
-    <>
-      <div style={{ display: 'flex', gap: '8px' }}>
-        <ControlBtn onClick={() => skip(-5)} title="Previous">
-          <img src="/img/previous1.png" alt="Previous" />
-        </ControlBtn>
-        <ControlBtn onClick={togglePlay} title={playing ? 'Pause' : 'Play'}>
-          <img
-            src={playing ? '/img/pause1.png' : '/img/play1.png'}
-            alt={playing ? 'Pause' : 'Play'}
-          />
-        </ControlBtn>
-        <ControlBtn onClick={() => skip(5)} title="Next">
-          <img src="/img/next-button1.png" alt="Next" />
-        </ControlBtn>
-        <ControlBtn onClick={onLike} title="Like">
-          <img src="/img/like1.png" alt="Like" />
-        </ControlBtn>
-        <ControlBtn onClick={onDislike} title="Dislike">
-          <img src="/img/dislike1.png" alt="Dislike" />
-        </ControlBtn>
-      </div>
-      <ScrollBarContainer>
-        <ScrollBar onClick={handleScroll}>
-          <ScrollThumb
-            style={{ left: `${thumb.left}%`, width: `${thumb.width}%` }}
-          />
-        </ScrollBar>
-      </ScrollBarContainer>
-      <Time>
-        {format(currentTime)} / {format(duration)}
-      </Time>
-    </>
+    <div style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "center" }}>
+      <ControlBtn title="⟸ 5s" onClick={() => seekRel(-5)} disabled={!canPlay}>
+        <img src={icons.prev} alt="prev" />
+      </ControlBtn>
+
+      <ControlBtn title={isPlaying ? "Pause" : "Play"} onClick={playPause} disabled={!canPlay}>
+        <img src={isPlaying ? icons.pause : icons.play} alt="play/pause" />
+      </ControlBtn>
+
+      <ControlBtn title="5s ⟹" onClick={() => seekRel(5)} disabled={!canPlay}>
+        <img src={icons.next} alt="next" />
+      </ControlBtn>
+
+      <ControlBtn title="Like" onClick={onLike}><img src={icons.like} alt="like" /></ControlBtn>
+      <ControlBtn title="Dislike" onClick={onDislike}><img src={icons.dislike} alt="dislike" /></ControlBtn>
+    </div>
   );
-};
+}
 
 PlaybackControls.propTypes = {
-  wavesurfer: PropTypes.object.isRequired,
+  wavesurfer: PropTypes.any,
   onLike: PropTypes.func,
   onDislike: PropTypes.func,
 };
 
 PlaybackControls.defaultProps = {
+  wavesurfer: null,
   onLike: () => {},
   onDislike: () => {},
 };
-
-export default PlaybackControls;

@@ -1,3 +1,4 @@
+// src/InfoModal.jsx
 import React, { useEffect } from "react";
 import styled from "styled-components";
 
@@ -105,8 +106,8 @@ export default function InfoModal({ open, onClose }) {
           <Section>
             <h4>Seleção / Edição de regiões</h4>
             <ul>
-              <li>Carrega numa região para a selecionar e abrir o menu de edição.</li>
-              <li>No menu podes mudar o <strong>Type</strong> (object/event/tag) e o <strong>Item</strong> correspondente. O label da região atualiza automaticamente.</li>
+              <li>Clica numa região para a selecionar e abrir o menu de edição.</li>
+              <li>No menu podes mudar o <strong>Type</strong> (object/event/tag) e o <strong>Item</strong>. O nome é refletido no topo da região.</li>
               <li><strong>Delete</strong> remove a região do espectrograma e da tabela.</li>
             </ul>
           </Section>
@@ -128,11 +129,23 @@ export default function InfoModal({ open, onClose }) {
             </ul>
           </Section>
 
+          {/* ——— NOVO: Zoom & Navegação ——— */}
           <Section>
-            <h4>Labels e Cores</h4>
+            <h4>Zoom &amp; Navegação</h4>
             <ul>
-              <li>O rótulo aparece no canto da região. Se criares vários com o mesmo nome, numeramos: <code>dolphin</code>, <code>dolphin 2</code>, <code>dolphin 3</code>…</li>
-              <li>As cores podem ser escolhidas na barra lateral (quando disponível). A cor aplica-se só à região selecionada.</li>
+              <li>No cabeçalho <em>Waveform</em> tens um <strong>slider de zoom</strong>. Move-o para ajustar o detalhe do sinal (px/s).</li>
+              <li>Usa os botões <strong>−</strong> e <strong>＋</strong> ao lado do slider para reduzir/aumentar o zoom em passos fixos.</li>
+              <li>Para <strong>navegar</strong> lateralmente, arrasta na horizontal (trackpad/scroll) ou usa o botão <strong>Seek</strong> na tabela para saltares para uma região específica.</li>
+              <li>O zoom não altera o áudio — apenas a forma como o vês.</li>
+            </ul>
+          </Section>
+
+          <Section>
+            <h4>Controlo de Reprodução</h4>
+            <ul>
+              <li>O ícone do velocímetro alterna a <strong>velocidade</strong>: <code>1x → 2x → 4x → 1x</code>.</li>
+              <li>O ícone de altifalante ativa o <strong>mute</strong>.</li>
+              <li>O botão “+10” avança rapidamente <strong>10 segundos</strong>.</li>
             </ul>
           </Section>
 

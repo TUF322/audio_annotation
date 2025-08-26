@@ -65,6 +65,8 @@ export default function SpectrogramOnClick({
   onReady,
   selectionEnabled,
   onRegionChange,
+  /** <- NOVO: controla o zoom horizontal (px por segundo) */
+  minPxPerSec,
 }) {
   const waveformRef = useRef(null);
   const wsRef = useRef(null);
@@ -163,7 +165,8 @@ export default function SpectrogramOnClick({
       progressColor: "#15839b",
       cursorWidth: 0,
       normalize: true,
-      minPxPerSec: 80,
+      /** <- usa o zoom inicial passado pelo pai */
+      minPxPerSec,
       fillParent: true,
       partialRender: true,
       dragToSeek: true,
@@ -241,7 +244,21 @@ export default function SpectrogramOnClick({
       regionsRef.current = null;
       regionMapRef.current.clear();
     };
-  }, [audioUrl, onReady]);
+    // NOTA: não metemos minPxPerSec nos deps para não recriar o WS a cada ajuste
+  }, [audioUrl, onReady, minPxPerSec]);
+
+  /** <- NOVO: atualizar o zoom quando a prop muda, sem recriar */
+  useEffect(() => {
+    const ws = wsRef.current;
+    if (!ws) return;
+    try {
+      if (typeof ws.setOptions === "function") {
+        ws.setOptions({ minPxPerSec });
+      } else if (typeof ws.zoom === "function") {
+        ws.zoom(minPxPerSec);
+      }
+    } catch {}
+  }, [minPxPerSec]);
 
   // ligar/desligar dragSelection
   useEffect(() => {
@@ -274,10 +291,14 @@ SpectrogramOnClick.propTypes = {
   onReady: PropTypes.func,
   selectionEnabled: PropTypes.bool,
   onRegionChange: PropTypes.func,
+  /** <- NOVO */
+  minPxPerSec: PropTypes.number,
 };
 
 SpectrogramOnClick.defaultProps = {
   onReady: null,
   selectionEnabled: false,
   onRegionChange: null,
+  /** <- NOVO */
+  minPxPerSec: 1,
 };
