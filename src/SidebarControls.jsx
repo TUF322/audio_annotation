@@ -1,4 +1,3 @@
-// src/SidebarControls.jsx
 import React from "react";
 import PropTypes from "prop-types";
 import {
@@ -9,26 +8,20 @@ import {
   Divider,
 } from "./App.js";
 
-// ícone do velocímetro conforme velocidade
-const speedIconFor = (rate) => {
-  if (rate === 1) return "/img/speedometer1.png"; // verde (1x)
-  if (rate === 2) return "/img/speedometer2.png"; // laranja (2x)
-  return "/img/speedometer3.png";                 // vermelho (4x)
-};
-
 export default function SidebarControls({
   selectionEnabled,
   onToggleSelection,
   onDeleteSelected,
   onColorSelected,
-
-  // novos
+  // novos controlos já existentes
   onInfoClick,
   playbackRate,
   onCycleSpeed,
   isMuted,
   onToggleMute,
   onForward10,
+  // NOVO:
+  onToggleView,
 }) {
   return (
     <>
@@ -46,17 +39,16 @@ export default function SidebarControls({
             <img src="/img/text-box1.png" alt="select" />
           </IconBtn>
 
-          <IconBtn title="Marcar verde" onClick={() => onColorSelected?.("region-green")}>
+          <IconBtn title="draw-select" onClick={() => onColorSelected?.("draw-select")}>
             <img src="/img/draw1.png" alt="green" />
           </IconBtn>
 
-          <IconBtn title="Marcar azul" onClick={() => onColorSelected?.("region-blue")}>
-            <img src="/img/view1.png" alt="blue" />
+          <IconBtn title="box-select" onClick={() => onColorSelected?.("box-select")}>
+            <img src="/img/box_select1.png" alt="blue" />
           </IconBtn>
 
-          <IconBtn title="Delete selection" onClick={onDeleteSelected}>
-            <img src="/img/print1.png" alt="delete" />
-          </IconBtn>
+          
+          
         </CtrlColumn>
       </CtrlSection>
 
@@ -68,7 +60,8 @@ export default function SidebarControls({
           <IconBtn title="Info" onClick={onInfoClick}>
             <img src="/img/info1.png" alt="info" />
           </IconBtn>
-          <IconBtn title="View">
+          {/* Olho -> alterna heatmap/spectrogram */}
+          <IconBtn title="View: Heatmap ON/OFF" onClick={onToggleView}>
             <img src="/img/view1.png" alt="view" />
           </IconBtn>
         </CtrlColumn>
@@ -96,31 +89,19 @@ export default function SidebarControls({
       <SectionLabel>AUDIO / AI</SectionLabel>
       <CtrlSection>
         <CtrlColumn>
-          {/* Mute/unmute */}
-          <IconBtn
-            title={isMuted ? "Unmute" : "Mute"}
-            onClick={onToggleMute}
-            style={{
-              outline: isMuted ? "2px solid #ef4444" : "none",
-              outlineOffset: "2px",
-            }}
-          >
+          <IconBtn title={isMuted ? "Unmute" : "Mute"} onClick={onToggleMute}>
             <img src="/img/mute1.png" alt="mute" />
           </IconBtn>
-
-          {/* Velocidade 1x→2x→4x */}
-          <IconBtn
-            title={`Speed ${playbackRate}x (click para alternar)`}
-            onClick={onCycleSpeed}
-          >
-            <img src={speedIconFor(playbackRate)} alt="speed" />
+          <IconBtn title={`Speed ${playbackRate}x (cycle)`} onClick={onCycleSpeed}>
+            <img src={
+              playbackRate === 1 ? "/img/speedometer3.png"
+              : playbackRate === 2 ? "/img/speedometer2.png"
+              : "/img/speedometer1.png"
+            } alt="speed" />
           </IconBtn>
-
-          {/* +10s */}
           <IconBtn title="+10s" onClick={onForward10}>
             <img src="/img/forward1.png" alt="forward" />
           </IconBtn>
-
           <IconBtn title="AI">
             <img src="/img/ai1.png" alt="ai" />
           </IconBtn>
@@ -135,11 +116,11 @@ SidebarControls.propTypes = {
   onToggleSelection: PropTypes.func.isRequired,
   onDeleteSelected: PropTypes.func.isRequired,
   onColorSelected: PropTypes.func,
-
   onInfoClick: PropTypes.func,
   playbackRate: PropTypes.number,
   onCycleSpeed: PropTypes.func,
   isMuted: PropTypes.bool,
   onToggleMute: PropTypes.func,
   onForward10: PropTypes.func,
+  onToggleView: PropTypes.func,   // <—— NOVO
 };

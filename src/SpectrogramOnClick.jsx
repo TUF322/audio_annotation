@@ -1,9 +1,9 @@
-// src/SpectrogramOnClick.jsx
 import React, { useEffect, useRef } from "react";
 import PropTypes from "prop-types";
 import styled, { createGlobalStyle } from "styled-components";
 import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin from "wavesurfer.js/dist/plugins/regions.esm.js";
+import SpectrogramPlugin from "wavesurfer.js/dist/plugins/spectrogram.esm.js";
 import { measureRegionFreqs } from "./fftMeasure";
 
 const Container = styled.div`
@@ -13,11 +13,23 @@ const Container = styled.div`
   width: 100%;
 `;
 
-const WaveformWrapper = styled.div`
+/* camada que contém waveform + heatmap sobreposto */
+const WaveContainer = styled.div`
+  position: relative;
   width: 100%;
   height: 260px;
   background: #0f111a;
   border-radius: 12px;
+  overflow: hidden;
+`;
+
+/* canvas do spectrogram/heatmap fica por cima do waveform */
+const SpectroLayer = styled.div`
+  position: absolute;
+  inset: 0;
+  opacity: ${p => (p.on ? 1 : 0)};
+  transition: opacity .15s linear;
+  pointer-events: none; /* passa cliques para o waveform (regiões, etc.) */
 `;
 
 /* ====== estilos globais (cores + label) ====== */
@@ -65,12 +77,15 @@ export default function SpectrogramOnClick({
   onReady,
   selectionEnabled,
   onRegionChange,
-  /** <- NOVO: controla o zoom horizontal (px por segundo) */
-  minPxPerSec,
+  heatmapOn,              // <—— NOVO: controla a visibilidade do heatmap
 }) {
-  const waveformRef = useRef(null);
+  const waveRef = useRef(null);
+  const spectroRef = useRef(null);
+
   const wsRef = useRef(null);
+  const specPluginRef = useRef(null);
   const regionsRef = useRef(null);
+
   const selectedIdRef = useRef(null);
   const regionMapRef = useRef(new Map());
   const bufferRef = useRef(null);
@@ -152,21 +167,19 @@ export default function SpectrogramOnClick({
       if (lab) lab.textContent = "";
       return;
     }
-    // reconta todas com o mesmo nome para manter a numeração correta
     updateLabelsForItem(item);
   };
 
-  // cria WaveSurfer + regions
+  // cria WaveSurfer + plugins
   useEffect(() => {
     const ws = WaveSurfer.create({
-      container: waveformRef.current,
+      container: waveRef.current,
       height: 260,
       waveColor: "#b7bec7",
       progressColor: "#15839b",
       cursorWidth: 0,
       normalize: true,
-      /** <- usa o zoom inicial passado pelo pai */
-      minPxPerSec,
+      minPxPerSec: 80,
       fillParent: true,
       partialRender: true,
       dragToSeek: true,
@@ -177,10 +190,21 @@ export default function SpectrogramOnClick({
     const regions = RegionsPlugin.create({ dragSelection: false });
     ws.registerPlugin(regions);
 
+    // spectrogram/heatmap plugin (renderiza no spectroRef)
+    const spectro = SpectrogramPlugin.create({
+      container: spectroRef.current,
+      labels: false,
+      height: 260,
+      fftSamples: 2048,
+      frequencyMin: 0,
+      // colorMap: undefined // default já é "heatmap"
+    });
+    ws.registerPlugin(spectro);
+
     ws.on("ready", () => {
       bufferRef.current = ws.getDecodedData();
       onReady?.(ws);
-      // após load, atualiza labels de eventuais regiões pré-existentes
+      // atualizar labels em regiões já existentes
       regionMapRef.current.forEach((r) => updateSingleLabel(r));
     });
 
@@ -194,7 +218,7 @@ export default function SpectrogramOnClick({
           console.warn("measureRegionFreqs error:", e);
         }
       }
-      const waveRect = waveformRef.current?.getBoundingClientRect();
+      const waveRect = waveRef.current?.getBoundingClientRect();
       const elRect = r.element?.getBoundingClientRect();
       const left = waveRect && elRect ? Math.max(8, Math.min(elRect.left - waveRect.left, waveRect.width - 220)) : 12;
       const top = 8;
@@ -226,7 +250,6 @@ export default function SpectrogramOnClick({
     regions.on("region-removed", (r) => {
       regionMapRef.current.delete(r.id);
       if (selectedIdRef.current === r.id) selectedIdRef.current = null;
-      // reconta as restantes do mesmo item
       if (r?.data?.item) updateLabelsForItem(r.data.item);
       computeAndEmit("removed", r);
     });
@@ -235,6 +258,7 @@ export default function SpectrogramOnClick({
 
     wsRef.current = ws;
     regionsRef.current = regions;
+    specPluginRef.current = spectro;
 
     return () => {
       try { ws.destroy(); } catch (err) {
@@ -242,23 +266,10 @@ export default function SpectrogramOnClick({
       }
       wsRef.current = null;
       regionsRef.current = null;
+      specPluginRef.current = null;
       regionMapRef.current.clear();
     };
-    // NOTA: não metemos minPxPerSec nos deps para não recriar o WS a cada ajuste
-  }, [audioUrl, onReady, minPxPerSec]);
-
-  /** <- NOVO: atualizar o zoom quando a prop muda, sem recriar */
-  useEffect(() => {
-    const ws = wsRef.current;
-    if (!ws) return;
-    try {
-      if (typeof ws.setOptions === "function") {
-        ws.setOptions({ minPxPerSec });
-      } else if (typeof ws.zoom === "function") {
-        ws.zoom(minPxPerSec);
-      }
-    } catch {}
-  }, [minPxPerSec]);
+  }, [audioUrl, onReady]);
 
   // ligar/desligar dragSelection
   useEffect(() => {
@@ -281,7 +292,12 @@ export default function SpectrogramOnClick({
   return (
     <Container>
       <GlobalRegionStyles />
-      <WaveformWrapper ref={waveformRef} />
+      <WaveContainer>
+        {/* WaveSurfer desenha aqui o waveform + regiões */}
+        <div ref={waveRef} style={{ width: "100%", height: "100%" }} />
+        {/* Heatmap/Spectrogram sobreposto (visibilidade controlada por prop) */}
+        <SpectroLayer ref={spectroRef} as="div" on={!!heatmapOn} />
+      </WaveContainer>
     </Container>
   );
 }
@@ -291,14 +307,12 @@ SpectrogramOnClick.propTypes = {
   onReady: PropTypes.func,
   selectionEnabled: PropTypes.bool,
   onRegionChange: PropTypes.func,
-  /** <- NOVO */
-  minPxPerSec: PropTypes.number,
+  heatmapOn: PropTypes.bool,
 };
 
 SpectrogramOnClick.defaultProps = {
   onReady: null,
   selectionEnabled: false,
   onRegionChange: null,
-  /** <- NOVO */
-  minPxPerSec: 1,
+  heatmapOn: false,
 };

@@ -410,7 +410,7 @@ function AppLayout() {
   const handleToggleSelection = useCallback(() => setSelectionEnabled((v) => !v), []);
   const handleReady = useCallback((ws) => setWavesurfer(ws), []);
 
-  // Plugin accessor (robusto)
+  // Plugin accessor 
   const getRegionsPlugin = useCallback(() => {
     const ws = wavesurfer;
     if (!ws) return null;
@@ -454,7 +454,7 @@ function AppLayout() {
     [getRegionsPlugin]
   );
 
-  // ======= conflict-free hotkeys (per list) =======
+  // ======= conflict-free hotkeys (per list) ======= 
   const buildHotkeyMap = useCallback((list) => {
     const used = new Set();
     const map = {};
@@ -595,7 +595,7 @@ function AppLayout() {
 
       selectedRegionIdRef.current = row.regionId;
 
-      // posição segura
+      // posição segura 
       const boxRect = viewerBoxRef.current?.getBoundingClientRect?.();
       const elRect = r.element?.getBoundingClientRect?.();
       const left =
@@ -657,7 +657,7 @@ function AppLayout() {
     setMenuState((m) => ({ ...m, visible: false }));
   }, [annotations, menuState.selectedUid, getRegionById]);
 
-  /* ================= QUICK CREATE ================= */
+  /* ================= QUICK CREATE =================  */
   const nextLabelFor = useCallback(
     (type, item) => {
       const count = annotations.filter(a => a.type === type && (a.item || a.label) === item).length;
@@ -721,7 +721,7 @@ function AppLayout() {
     [wavesurfer, getRegionsPlugin, nextLabelFor]
   );
 
-  // Global hotkeys
+  // Global hotkeys  
   useEffect(() => {
     const letterToAction = {};
     Object.entries(objectHotkeys).forEach(([name, ch]) => {
@@ -760,7 +760,7 @@ function AppLayout() {
 
   const defsByType = { object: objectDefs, event: eventDefs, tag: tagDefs };
 
-  // ======= ligação tempo/progresso =======
+  // ======= ligação tempo/progresso =======  
   const attachWsTimeHandlers = useCallback((ws) => {
     if (!ws) return () => {};
     const upDur = () => setDuration(ws.getDuration?.() || 0);
@@ -840,6 +840,7 @@ function AppLayout() {
             isMuted={isMuted}
             onToggleMute={toggleMute}
             onForward10={forward10}
+            
           />
         </LeftControls>
 
@@ -922,7 +923,7 @@ function AppLayout() {
                 <ZoomBtn onClick={() => setZoom((z) => Math.min(500, z + 20))} title="Zoom in">+</ZoomBtn>
               </ZoomRow>
 
-              {/* Barra de progresso + tempo */}
+              {/* Barra de progresso + tempo  */}
               <ProgressOuter onClick={onProgressClick} title="Click para procurar">
                 <ProgressFill style={{ width: `${progressPct}%` }} />
               </ProgressOuter>
@@ -936,7 +937,7 @@ function AppLayout() {
                 />
               </Playback>
 
-              {/* Popup de edição da região */}
+              {/* Popup de edição da região  */}
               <RegionMenu
                 visible={menuState.visible}
                 left={menuState.left}
