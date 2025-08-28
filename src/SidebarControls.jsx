@@ -94,9 +94,9 @@ export default function SidebarControls({
           </IconBtn>
           <IconBtn title={`Speed ${playbackRate}x (cycle)`} onClick={onCycleSpeed}>
             <img src={
-              playbackRate === 1 ? "/img/speedometer3.png"
+              playbackRate === 1 ? "/img/speedometer1.png"
               : playbackRate === 2 ? "/img/speedometer2.png"
-              : "/img/speedometer1.png"
+              : "/img/speedometer3.png"
             } alt="speed" />
           </IconBtn>
           <IconBtn title="+10s" onClick={onForward10}>

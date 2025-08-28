@@ -1,4 +1,3 @@
-// src/App.js
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import styled from "styled-components";
 import SpectrogramOnClick from "./SpectrogramOnClick";
@@ -213,7 +212,7 @@ export const ScrollBarContainer = ProgressOuter;
 export const ScrollBar = ProgressOuter;
 export const ScrollThumb = ProgressFill;
 
-/* ===== barra de ZOOM (se precisares mostrar) ===== */
+/* ===== barra de ZOOM ===== */
 const ZoomRow = styled.div`
   display:flex; align-items:center; gap:10px; padding: 2px 0 6px;
 `;
@@ -253,12 +252,16 @@ function AppLayout() {
   const [selectionEnabled, setSelectionEnabled] = useState(false);
   const selectedRegionIdRef = useRef(null);
 
+  // === Heatmap toggle
+  const [heatmapOn, setHeatmapOn] = useState(false);
+  const toggleHeatmap = useCallback(() => setHeatmapOn(v => !v), []);
+
   // ---- tempo/progresso ----
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
 
   // ---- ZOOM (px/s) ----
-  const [zoom, setZoom] = useState(80); // deve bater com o do SpectrogramOnClick
+  const [zoom, setZoom] = useState(80);
   useEffect(() => {
     const ws = wavesurfer;
     if (!ws) return;
@@ -454,6 +457,55 @@ function AppLayout() {
     [getRegionsPlugin]
   );
 
+  // >>> garante que cada região tem badge e texto correto
+  const ensureRegionLabel = useCallback((region) => {
+    if (!region?.element) return;
+
+    const data = (region.getData?.() || region.data || {});
+    let text =
+      (typeof data.label === "string" && data.label.trim()) ||
+      (typeof data.item === "string" && data.item.trim()) ||
+      (annotations.find(a => a.regionId === region.id)?.label || "").trim() ||
+      (annotations.find(a => a.regionId === region.id)?.item || "").trim() ||
+      "";
+
+    const el = region.element;
+    el.style.overflow = "visible";
+    if (!el.style.position) el.style.position = "relative";
+
+    let badge = el.querySelector(".wsr-label");
+    if (!badge) {
+      badge = document.createElement("div");
+      badge.className = "wsr-label";
+      el.appendChild(badge);
+    }
+
+    Object.assign(badge.style, {
+      position: "absolute",
+      top: "2px",
+      left: "4px",
+      padding: "2px 6px",
+      fontSize: "11px",
+      lineHeight: "1.2",
+      fontWeight: "600",
+      background: "rgba(31,36,48,0.92)",
+      border: `1px solid ${theme.border}`,
+      borderRadius: "6px",
+      color: "#fff",
+      WebkitTextFillColor: "#fff",
+      textShadow: "0 1px 1px rgba(0,0,0,.45)",
+      pointerEvents: "none",
+      zIndex: 2147483647,
+      whiteSpace: "nowrap",
+      maxWidth: "240px",
+      textOverflow: "ellipsis",
+      overflow: "hidden",
+      userSelect: "none",
+    });
+
+    badge.textContent = text || "";
+  }, [annotations]);
+
   // ======= conflict-free hotkeys (per list) ======= 
   const buildHotkeyMap = useCallback((list) => {
     const used = new Set();
@@ -479,6 +531,8 @@ function AppLayout() {
     (evt) => {
       const { type, region, menuPos } = evt;
       const rid = region.id;
+
+      ensureRegionLabel(region); // garante/atualiza label a cada evento
 
       if (type === "selected") selectedRegionIdRef.current = rid;
       if (type === "removed" && selectedRegionIdRef.current === rid) {
@@ -548,7 +602,7 @@ function AppLayout() {
         );
       }
     },
-    [nextUid, getRegionById]
+    [nextUid, getRegionById, ensureRegionLabel]
   );
 
   const handleDeleteSelected = useCallback(() => {
@@ -622,11 +676,12 @@ function AppLayout() {
           const d = r.getData?.() || r.data || {};
           const next = { ...d, type: newType, item: "", label: "" };
           if (r.setData) r.setData(next); else r.data = next;
+          ensureRegionLabel(r);
         }
         return clone;
       });
     },
-    [menuState.selectedUid, getRegionById]
+    [menuState.selectedUid, getRegionById, ensureRegionLabel]
   );
 
   const handleItemChange = useCallback(
@@ -641,11 +696,12 @@ function AppLayout() {
           const d = r.getData?.() || r.data || {};
           const next = { ...d, item: newItem, label: newItem };
           if (r.setData) r.setData(next); else r.data = next;
+          ensureRegionLabel(r);
         }
         return clone;
       });
     },
-    [menuState.selectedUid, getRegionById]
+    [menuState.selectedUid, getRegionById, ensureRegionLabel]
   );
 
   // RegionMenu: DELETE
@@ -702,6 +758,8 @@ function AppLayout() {
         }
       } catch {}
 
+      ensureRegionLabel(r); 
+
       selectedRegionIdRef.current = r.id;
       r.addClass?.("region-selected") ?? r.element?.classList?.add("region-selected");
 
@@ -718,18 +776,18 @@ function AppLayout() {
       };
       setTimeout(bump, 0);
     },
-    [wavesurfer, getRegionsPlugin, nextLabelFor]
+    [wavesurfer, getRegionsPlugin, nextLabelFor, ensureRegionLabel]
   );
 
   // Global hotkeys  
+  const buildMap = (objs, evs) => {
+    const map = {};
+    Object.entries(objs).forEach(([name, ch]) => { if (ch) map[ch] = { type: "object", item: name }; });
+    Object.entries(evs).forEach(([name, ch]) => { if (ch && !map[ch]) map[ch] = { type: "event", item: name }; });
+    return map;
+  };
   useEffect(() => {
-    const letterToAction = {};
-    Object.entries(objectHotkeys).forEach(([name, ch]) => {
-      if (ch) letterToAction[ch] = { type: "object", item: name };
-    });
-    Object.entries(eventHotkeys).forEach(([name, ch]) => {
-      if (ch && !letterToAction[ch]) letterToAction[ch] = { type: "event", item: name };
-    });
+    const letterToAction = buildMap(objectHotkeys, eventHotkeys);
 
     const onKey = (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
@@ -760,7 +818,7 @@ function AppLayout() {
 
   const defsByType = { object: objectDefs, event: eventDefs, tag: tagDefs };
 
-  // ======= ligação tempo/progresso =======  
+  // ======= ligação tempo/progresso ======= 
   const attachWsTimeHandlers = useCallback((ws) => {
     if (!ws) return () => {};
     const upDur = () => setDuration(ws.getDuration?.() || 0);
@@ -840,7 +898,7 @@ function AppLayout() {
             isMuted={isMuted}
             onToggleMute={toggleMute}
             onForward10={forward10}
-            
+            onToggleView={toggleHeatmap}   /* heatmap eye toggle */
           />
         </LeftControls>
 
@@ -907,9 +965,10 @@ function AppLayout() {
                 onReady={handleReady}
                 selectionEnabled={selectionEnabled}
                 onRegionChange={handleRegionChange}
+                heatmapOn={heatmapOn}
               />
 
-              {/* ZOOM (mantido, não destrói nada) */}
+              {/* ZOOM */}
               <ZoomRow>
                 <ZoomBtn onClick={() => setZoom((z) => Math.max(20, z - 20))} title="Zoom out">−</ZoomBtn>
                 <ZoomRange
@@ -923,7 +982,7 @@ function AppLayout() {
                 <ZoomBtn onClick={() => setZoom((z) => Math.min(500, z + 20))} title="Zoom in">+</ZoomBtn>
               </ZoomRow>
 
-              {/* Barra de progresso + tempo  */}
+              {/* Barra de progresso + tempo */}
               <ProgressOuter onClick={onProgressClick} title="Click para procurar">
                 <ProgressFill style={{ width: `${progressPct}%` }} />
               </ProgressOuter>
@@ -937,7 +996,7 @@ function AppLayout() {
                 />
               </Playback>
 
-              {/* Popup de edição da região  */}
+              {/* Popup de edição da região */}
               <RegionMenu
                 visible={menuState.visible}
                 left={menuState.left}

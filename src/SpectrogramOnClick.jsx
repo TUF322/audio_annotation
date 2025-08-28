@@ -27,7 +27,7 @@ const WaveContainer = styled.div`
 const SpectroLayer = styled.div`
   position: absolute;
   inset: 0;
-  opacity: ${p => (p.on ? 1 : 0)};
+  opacity: ${p => (p.$on ? 1 : 0)};
   transition: opacity .15s linear;
   pointer-events: none; /* passa cliques para o waveform (regiões, etc.) */
 `;
@@ -77,7 +77,7 @@ export default function SpectrogramOnClick({
   onReady,
   selectionEnabled,
   onRegionChange,
-  heatmapOn,              // <—— NOVO: controla a visibilidade do heatmap
+  heatmapOn,              // <—— controla a visibilidade do heatmap
 }) {
   const waveRef = useRef(null);
   const spectroRef = useRef(null);
@@ -137,6 +137,8 @@ export default function SpectrogramOnClick({
   const ensureLabelEl = (r) => {
     const el = r?.element;
     if (!el) return null;
+    el.style.overflow = "visible";             // <- NÃO cortar o texto
+    if (!el.style.position) el.style.position = "relative";
     let lab = el.querySelector(".wsr-label");
     if (!lab) {
       lab = document.createElement("div");
@@ -228,6 +230,8 @@ export default function SpectrogramOnClick({
     regions.on("region-clicked", (r, e) => {
       e.stopPropagation?.();
       selectRegion(r.id);
+      ensureLabelEl(r);       // garante elemento
+      updateSingleLabel(r);   // garante texto
       computeAndEmit("selected", r);
     });
 
@@ -295,8 +299,8 @@ export default function SpectrogramOnClick({
       <WaveContainer>
         {/* WaveSurfer desenha aqui o waveform + regiões */}
         <div ref={waveRef} style={{ width: "100%", height: "100%" }} />
-        {/* Heatmap/Spectrogram sobreposto (visibilidade controlada por prop) */}
-        <SpectroLayer ref={spectroRef} as="div" on={!!heatmapOn} />
+        {/* Heatmap/Spectrogram sobreposto*/}
+        <SpectroLayer ref={spectroRef} as="div" $on={!!heatmapOn} />
       </WaveContainer>
     </Container>
   );
